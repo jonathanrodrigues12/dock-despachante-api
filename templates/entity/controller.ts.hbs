@@ -1,0 +1,103 @@
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { __Entity__Service } from './__kebab__.service';
+import { __Entity__ } from './__kebab__.entity';
+import { PoliciesGuard } from '@/casl/guard/policies.guard';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CheckPolicies } from '@/casl/guard/check-policies';
+import { AppAbility } from '@/casl/casl-ability.factory';
+import { Action } from '@/common/entity/actionbase';
+import { ParamsPagination } from '@/common/paginations/params-pagination';
+import { PaginatedResponse, PaginationResponse } from '@/common/paginations/paginationResponse';
+import { Create__Entity__Dto } from './dto/create-__kebab__-dto';
+import { Update__Entity__Dto } from './dto/update-__kebab__-dto';
+import { CurrentUser } from '@/jwt/current-user.decorator';
+import { IJwtPayload } from '@/jwt/jwt.strategy';
+
+@UseGuards(PoliciesGuard)
+@ApiBearerAuth()
+@ApiTags('__kebabPlural__')
+@Controller('__kebab__')
+export class __Entity__Controller {
+  constructor(private readonly service: __Entity__Service) {}
+
+  @ApiOperation({
+    summary: 'Create a new __entity__.',
+  })
+  @ApiOkResponse({
+    description: 'Create a new __entity__',
+    type: __Entity__,
+  })
+  @CheckPolicies((ability: AppAbility) => ability.can(Action.CREATE, __Entity__))
+  @Post()
+  async create(
+    @Body() data: Create__Entity__Dto,
+    @CurrentUser() { userId: requestBy }: IJwtPayload
+  ): Promise<__Entity__> {
+    return this.service.create(data, requestBy);
+  }
+
+  @ApiOperation({
+    summary: 'Get one __entity__.',
+  })
+  @ApiOkResponse({
+    description: 'Get one __entity__',
+    type: __Entity__,
+  })
+  @CheckPolicies((ability: AppAbility) => ability.can(Action.READ, __Entity__))
+  @Get(':id')
+  async findOne(@Param('id') id: string): Promise<__Entity__> {
+    return this.service.findOne(id);
+  }
+
+  @ApiOperation({
+    summary: 'Get all __entities__.',
+  })
+  @PaginatedResponse(__Entity__)
+  @CheckPolicies((ability: AppAbility) => ability.can(Action.READ, __Entity__))
+  @Get()
+  async findAll(@Query() params: ParamsPagination): Promise<PaginationResponse<__Entity__>> {
+    const { page, perPage } = params;
+    const [entities, total] = await this.service.findAll(params);
+    return {
+      data: entities,
+      meta: {
+        page,
+        perPage,
+        total,
+      },
+    };
+  }
+
+  @ApiOperation({
+    summary: 'Update an existing __entity__ by ID.',
+  })
+  @ApiOkResponse({
+    description: 'Returns the updated __entity__.',
+    type: __Entity__,
+  })
+  @CheckPolicies((ability: AppAbility) => ability.can(Action.UPDATE, __Entity__))
+  @Put(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() data: Update__Entity__Dto,
+    @CurrentUser() { userId: requestBy }: IJwtPayload,
+  ): Promise<__Entity__> {
+    return this.service.update(id, data, requestBy);
+  }
+
+  @ApiOperation({
+    summary: 'Delete a __entity__.',
+  })
+  @ApiOkResponse({
+    description: 'Delete a __entity__',
+    type: Boolean,
+  })
+  @CheckPolicies((ability: AppAbility) => ability.can(Action.DELETE, __Entity__))
+  @Delete(':id')
+  async delete(
+    @Param('id') id: string,
+    @CurrentUser() { userId: requestBy }: IJwtPayload,
+    ): Promise<boolean> {
+    return this.service.delete(id, requestBy);
+  }
+}

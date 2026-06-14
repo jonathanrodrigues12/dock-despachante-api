@@ -1,0 +1,89 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { __Entity__Service } from './__kebab__.service';
+import { __Entity__Repository } from './repositories/__kebab__.repository';
+import { HttpException } from '@nestjs/common';
+import { __Entity__ } from './__kebab__.entity';
+
+const mockEntity: __Entity__ = {
+  id: '1',
+  name: 'Test Entity',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+describe('__Entity__Service', () => {
+  let service: __Entity__Service;
+  let repo: any;
+
+  beforeEach(async () => {
+    repo = {
+      save: jest.fn(),
+      findOne: jest.fn(),
+      update: jest.fn(),
+      findAndDelete: jest.fn(),
+      findAndCount: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        __Entity__Service,
+        { provide: __Entity__Repository, useValue: repo },
+      ],
+    }).compile();
+
+    service = module.get<__Entity__Service>(__Entity__Service);
+  });
+
+  it('should create an entity', async () => {
+    repo.save.mockResolvedValue(mockEntity);
+    await expect(service.create({ name: mockEntity.name })).resolves.toEqual(mockEntity);
+  });
+
+  it('should find one entity', async () => {
+    repo.findOne.mockResolvedValue(mockEntity);
+    await expect(service.findOne('1')).resolves.toEqual(mockEntity);
+  });
+
+  it('should throw if entity not found on findOne', async () => {
+    repo.findOne.mockResolvedValue(null);
+    await expect(service.findOne('1')).rejects.toThrow(HttpException);
+  });
+
+  it('should update an entity', async () => {
+    repo.findOne.mockResolvedValue(mockEntity);
+    repo.update.mockResolvedValue({ ...mockEntity, name: 'Updated' });
+    await expect(service.update('1', { name: 'Updated' })).resolves.toEqual({
+      ...mockEntity,
+      name: 'Updated',
+    });
+  });
+
+  it('should throw if entity not found on update', async () => {
+    repo.findOne.mockResolvedValue(null);
+    await expect(service.update('1', { name: 'Updated' })).rejects.toThrow(HttpException);
+  });
+
+  it('should throw if entity not updated', async () => {
+    repo.findOne.mockResolvedValue(mockEntity);
+    repo.update.mockResolvedValue(null);
+    await expect(service.update('1', { name: 'Updated' })).rejects.toThrow(HttpException);
+  });
+
+  it('should delete an entity', async () => {
+    repo.findAndDelete.mockResolvedValue(true);
+    await expect(service.delete('1', '1')).resolves.toBe(true);
+  });
+
+  it('should throw if entity not found on delete', async () => {
+    repo.findAndDelete.mockResolvedValue(null);
+    await expect(service.delete('1', '1')).rejects.toThrow(HttpException);
+  });
+
+  it('should find all entities with pagination', async () => {
+    repo.findAndCount.mockResolvedValue([[mockEntity], 1]);
+    await expect(service.findAll({ page: 1, perPage: 10 } as any)).resolves.toEqual([
+      [mockEntity],
+      1,
+    ]);
+  });
+});

@@ -1,0 +1,8 @@
+import { EntityBase } from '@/common/entity/entity-base';
+import { Entity, Column } from 'typeorm';
+
+@Entity('__snakePlural__')
+export class __Entity__ extends EntityBase {
+  @Column({ nullable: false })
+  name: string;
+}

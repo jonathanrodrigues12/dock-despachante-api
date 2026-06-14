@@ -1,0 +1,41 @@
+import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { __Entity__ } from './__kebab__.entity';
+import { __Entity__Repository } from './repositories/__kebab__.repository';
+import { Search__Entity__Params } from './interfaces/__kebab__.interface';
+
+@Injectable()
+export class __Entity__Service {
+  constructor(private readonly repo: __Entity__Repository) {}
+
+  async create(data: Partial<__Entity__>, requestBy?: string): Promise<__Entity__> {
+    return this.repo.save(data, requestBy);
+  }
+
+  async findOne(id: string): Promise<__Entity__> {
+    const entity = await this.repo.findOne(id);
+    if (!entity) {
+      throw new NotFoundException('__Entity__ not found');
+    }
+    return entity;
+  }
+
+  async findAll(params: Search__Entity__Params): Promise<[__Entity__[], number]> {
+    return this.repo.findAndCount(params);
+  }
+
+  async update(id: string, data: Partial<__Entity__>, requestBy?: string): Promise<__Entity__> {
+    const updated = await this.repo.update(id, data, requestBy);
+    if (!updated) {
+      throw new InternalServerErrorException('__Entity__ not updated');
+    }
+    return updated;
+  }
+
+  async delete(id: string, requestBy: string): Promise<boolean> {
+    const deleted = await this.repo.findAndDelete(id, requestBy);
+    if (!deleted) {
+      throw new NotFoundException('__Entity__ not found');
+    }
+    return true;
+  }
+}

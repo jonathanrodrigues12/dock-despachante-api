@@ -1,0 +1,64 @@
+import { Injectable } from '@nestjs/common';
+import { Repository, FindOptionsWhere, ILike } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { __Entity__ } from '../__kebab__.entity';
+import { I__Entity__Repository, Search__Entity__Params } from '../interfaces/__kebab__.interface';
+import { isUUID } from 'class-validator';
+
+@Injectable()
+export class __Entity__Repository implements I__Entity__Repository {
+  constructor(
+    @InjectRepository(__Entity__)
+    private readonly repository: Repository<__Entity__>,
+  ) {}
+
+  async save(data: Partial<__Entity__>, requestBy?: string): Promise<__Entity__> {
+    const entity = this.repository.create({
+      ...data,
+      ...(requestBy ? { createdBy: { id: requestBy } } : {}),
+    });
+    return this.repository.save(entity);
+  }
+
+  async findOne(id: string): Promise<__Entity__ | null> {
+    return this.repository.findOne({ where: { id } });
+  }
+
+  async findAndDelete(id: string, requestBy: string): Promise<boolean> {
+    const entity = await this.repository.findOne({ where: { id } });
+    if (!entity) return false;
+    await this.repository.update(entity.id, {
+      deletedAt: new Date(),
+      deletedBy: { id: requestBy },
+    });
+    return true;
+  }
+
+  async update(id: string, data: Partial<__Entity__>, requestBy?: string): Promise<__Entity__ | null> {
+    await this.repository.update(id, {
+      ...data,
+      ...(requestBy ? { updatedBy: { id: requestBy } } : {}),
+     });
+    return this.findOne(id);
+  }
+
+  async findAndCount(params: Search__Entity__Params): Promise<[__Entity__[], number]> {
+    const { page = 1, perPage = 10, search, where: defaultWhere } = params;
+    let where: FindOptionsWhere<__Entity__>[] = defaultWhere ? defaultWhere : [];
+
+    if (search) {
+      if (isUUID(search)) {
+        where.push({ id: search } as any);
+      }
+
+      where.push({ name: ILike(`%${search}%`) } as any);
+    }
+
+    return await this.repository.findAndCount({
+      where,
+      skip: (page - 1) * perPage,
+      take: perPage,
+      order: { createdAt: 'DESC' },
+    });
+  }
+}

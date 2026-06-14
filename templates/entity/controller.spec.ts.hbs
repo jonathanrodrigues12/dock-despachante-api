@@ -1,0 +1,80 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { __Entity__Controller } from './__kebab__.controller';
+import { __Entity__Service } from './__kebab__.service';
+import { __Entity__ } from './__kebab__.entity';
+import { Reflector } from '@nestjs/core';
+import { CaslAbilityFactory } from '@/casl/casl-ability.factory';
+import { IJwtPayload } from '@/jwt/jwt.strategy';
+import { Role } from '@/common/entity/rolebase';
+import { PaginationResponse } from '@/common/paginations/paginationResponse';
+
+const mockEntity: __Entity__ = {
+  id: '1',
+  name: 'Test Entity',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+const currentUser: IJwtPayload = {
+  userId: '1',
+  role: Role.ADMIN,
+};
+
+describe('__Entity__Controller', () => {
+  let controller: __Entity__Controller;
+  let service: any;
+
+  beforeEach(async () => {
+    service = {
+      create: jest.fn(),
+      findOne: jest.fn(),
+      findAll: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [__Entity__Controller],
+      providers: [
+        { provide: __Entity__Service, useValue: service },
+        { provide: Reflector, useValue: { get: jest.fn() } },
+        {
+          provide: CaslAbilityFactory,
+          useValue: { createForUser: jest.fn(() => ({ can: () => true })) },
+        },
+      ],
+    }).compile();
+
+    controller = module.get<__Entity__Controller>(__Entity__Controller);
+  });
+
+  it('should create a __entity__', async () => {
+    service.create.mockResolvedValue(mockEntity);
+    const dto = { name: mockEntity.name } as any;
+    await expect(controller.create(dto, currentUser)).resolves.toEqual(mockEntity);
+  });
+
+  it('should get one __entity__', async () => {
+    service.findOne.mockResolvedValue(mockEntity);
+    await expect(controller.findOne('1')).resolves.toEqual(mockEntity);
+  });
+
+  it('should get all __entities__', async () => {
+    service.findAll.mockResolvedValue([[mockEntity], 1]);
+    const params = { page: 1, perPage: 10 } as any;
+    const result: PaginationResponse<__Entity__> = await controller.findAll(params);
+    expect(result.data).toEqual([mockEntity]);
+    expect(result.meta.total).toBe(1);
+  });
+
+  it('should update a __entity__', async () => {
+    service.update.mockResolvedValue(mockEntity);
+    const dto = { name: 'Updated' } as any;
+    await expect(controller.update('1', dto, currentUser)).resolves.toEqual(mockEntity);
+  });
+
+  it('should delete a __entity__', async () => {
+    service.delete.mockResolvedValue(true);
+    await expect(controller.delete('1', currentUser)).resolves.toBe(true);
+  });
+});

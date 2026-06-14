@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv \"d:/Fszion/projetos/Dock despachante/api/src/test\" \"d:/Fszion/projetos/Dock despachante/api/src/testing\")",
+      "PowerShell(Rename-Item -Path \"d:\\\\Fszion\\\\projetos\\\\Dock despachante\\\\api\\\\src\\\\test\" -NewName \"testing\")",
+      "PowerShell(Copy-Item -Path \"d:\\\\Fszion\\\\projetos\\\\Dock despachante\\\\api\\\\src\\\\test\" -Destination \"d:\\\\Fszion\\\\projetos\\\\Dock despachante\\\\api\\\\src\\\\testing\" -Recurse)"
+    ],
+    "additionalDirectories": [
+      "d:\\Fszion\\projetos\\Dock despachante\\api\\src\\test"
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+import { ParamsPagination } from '@/common/paginations/params-pagination';
+import { __Entity__ } from '../__kebab__.entity';
+import { FindOptionsWhere } from 'typeorm';
+
+export interface I__Entity__Repository {
+  save(data: Partial<__Entity__>, requestBy?: string): Promise<__Entity__>;
+  findOne(id: string): Promise<__Entity__ | null>;
+  findAndDelete(id: string, requestBy: string): Promise<boolean>;
+  update(id: string, data: Partial<__Entity__>, requestBy?: string): Promise<__Entity__ | null>;
+  findAndCount(params: Search__Entity__Params): Promise<[__Entity__[], number]>;
+}
+
+export interface Search__Entity__Params extends ParamsPagination {
+  where?: FindOptionsWhere<__Entity__>[];
+}

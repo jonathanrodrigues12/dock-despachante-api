@@ -1,0 +1,15 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { __Entity__ } from './__kebab__.entity';
+import { __Entity__Service } from './__kebab__.service';
+import { __Entity__Controller } from './__kebab__.controller';
+import { __Entity__Repository } from './repositories/__kebab__.repository';
+import { CaslModule } from '../casl/casl.module';
+
+@Module({
+  imports: [CaslModule, TypeOrmModule.forFeature([__Entity__])],
+  controllers: [__Entity__Controller],
+  providers: [__Entity__Service, __Entity__Repository],
+  exports: [__Entity__Service, __Entity__Repository],
+})
+export class __Entity__Module {}

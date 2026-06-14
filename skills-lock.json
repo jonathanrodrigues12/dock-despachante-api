@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "nestjs-standards": {
+      "source": "Going2Custom/skills-ia",
+      "sourceType": "github",
+      "skillPath": "nestjs-standards/SKILL.md",
+      "computedHash": "277460204f32f841cb6a2c3dc756a1aac973658bccb1bfe8dfa023161a260b53"
+    }
+  }
+}
