@@ -8,6 +8,7 @@ import { CustomMailerModule } from './mailer/mailer.module';
 import { EnvModule } from './env/env.module';
 import { AuthModule } from './auth/auth.module';
 import { CaslModule } from './casl/casl.module';
+import { VehicleDebtsModule } from './vehicle-debts/vehicle-debts.module';
 @Module({
   imports: [
     DatabaseModule,
@@ -17,6 +18,7 @@ import { CaslModule } from './casl/casl.module';
     EnvModule,
     AuthModule,
     CaslModule,
+    VehicleDebtsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
