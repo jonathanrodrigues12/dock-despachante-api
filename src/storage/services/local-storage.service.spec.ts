@@ -88,9 +88,7 @@ describe('LocalStorageService', () => {
     });
 
     it('should not call unlink when file does not exist', async () => {
-      (fs.existsSync as jest.Mock)
-        .mockReturnValueOnce(true) // constructor check
-        .mockReturnValueOnce(false); // deleteFile check
+      (fs.existsSync as jest.Mock).mockReturnValueOnce(false);
 
       await service.deleteFile('/uploads/images/missing.jpg');
 

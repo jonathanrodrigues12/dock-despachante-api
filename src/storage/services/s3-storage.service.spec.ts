@@ -26,7 +26,7 @@ const makeEnvService = (overrides: Record<string, string> = {}): unknown => ({
 
 describe('S3StorageService', () => {
   let service: S3StorageService;
-  let envService: Partial<EnvService>;
+  let envService: any;
 
   beforeEach(async () => {
     mockSend.mockReset();
@@ -35,7 +35,7 @@ describe('S3StorageService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         S3StorageService,
-        { provide: EnvService, useValue: envService as EnvService },
+        { provide: EnvService, useValue: envService },
       ],
     }).compile();
 
