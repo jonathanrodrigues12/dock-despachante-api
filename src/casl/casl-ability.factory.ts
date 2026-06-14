@@ -22,16 +22,6 @@ export class CaslAbilityFactory {
     );
 
     switch (user.role) {
-      case Role.SUPERADMIN:
-        {
-          can(Action.LIST, 'all');
-          can(Action.READ, 'all');
-          can(Action.UPDATE, 'all');
-          can(Action.DELETE, 'all');
-          can(Action.CREATE, 'all');
-        }
-        break;
-
       case Role.ADMIN:
         {
           can(Action.LIST, 'all');
@@ -39,12 +29,6 @@ export class CaslAbilityFactory {
           can(Action.UPDATE, 'all');
           can(Action.DELETE, 'all');
           can(Action.CREATE, 'all');
-        }
-        break;
-
-      case Role.CUSTOMER:
-        {
-          can(Action.READ, User);
         }
         break;
     }

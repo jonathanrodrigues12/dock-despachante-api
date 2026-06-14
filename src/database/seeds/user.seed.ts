@@ -16,19 +16,9 @@ export class UserSeeder implements Seeder {
   async access(userRepository: Repository<User>): Promise<void> {
     const users = [
       {
-        email: 'superadmin@example.com',
-        password: 'Password123!',
-        role: Role.SUPERADMIN,
-      },
-      {
         email: 'admin@example.com',
         password: 'Password123!',
         role: Role.ADMIN,
-      },
-      {
-        email: 'customer@example.com',
-        password: 'Password123!',
-        role: Role.CUSTOMER,
       },
     ];
 

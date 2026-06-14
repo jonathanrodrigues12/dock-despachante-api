@@ -147,7 +147,7 @@ export class AuthService {
         surname: oauthUser.surname || '',
         photo_url: oauthUser.picture,
         provider: oauthUser.provider,
-        role: Role.CUSTOMER,
+        role: Role.ADMIN,
       });
     } else {
       const updates: Partial<User> = {};

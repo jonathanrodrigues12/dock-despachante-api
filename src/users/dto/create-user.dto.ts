@@ -25,7 +25,7 @@ export class CreateUserDto {
   @IsNotEmpty({ message: 'Email is required' })
   email: string;
 
-  @ApiProperty({ enum: Role, default: Role.CUSTOMER, required: true })
+  @ApiProperty({ enum: Role, default: Role.ADMIN, required: true })
   @IsNotEmpty()
   role: Role;
 
