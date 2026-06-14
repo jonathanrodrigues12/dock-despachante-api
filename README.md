@@ -1,452 +1,499 @@
-# API Backend
+# Dock Despachante — API
+
+API backend da plataforma **Dock Despachante**, sistema SaaS para gestão de serviços de documentação veicular no Brasil.
 
 ## Sumário
 
-- [Sobre o Projeto](#sobre-o-projeto)
-- [Padrões e Convenções](#padrões-e-convenções)
-- [Instalação](#instalação)
-- [Configuração](#configuração)
-- [Google OAuth](#google-oauth)
+- [Stack](#stack)
+- [Arquitetura](#arquitetura)
+- [Módulos](#módulos)
+- [Endpoints](#endpoints)
+- [Autenticação e Autorização](#autenticação-e-autorização)
+- [Variáveis de Ambiente](#variáveis-de-ambiente)
+- [Instalação e Execução](#instalação-e-execução)
 - [Scripts](#scripts)
+- [Storage e Processamento de Imagens](#storage-e-processamento-de-imagens)
+- [Gerador de Entidades](#gerador-de-entidades)
+- [Testes](#testes)
 - [Padrão de Commits](#padrão-de-commits)
-- [Padrão de Rotas](#padrão-de-rotas)
 - [Swagger](#swagger)
-- [Licença](#licença)
-- [Documentação Técnica](#documentação-técnica)
 
 ---
 
-## Sobre o Projeto
+## Stack
 
-API backend para gestão de usuários, autenticação, permissões e envio de e-mails, construída com NestJS, TypeORM, PostgreSQL e CASL.
+| Tecnologia         | Uso                                       |
+|--------------------|-------------------------------------------|
+| NestJS 11          | Framework principal                       |
+| TypeScript 5       | Linguagem                                 |
+| TypeORM 0.3        | ORM                                       |
+| PostgreSQL         | Banco de dados (`dockDespachante`)        |
+| JWT + Passport     | Autenticação stateless                    |
+| Google OAuth2 (OIDC) | Login social                            |
+| speakeasy / qrcode | MFA via TOTP                              |
+| CASL               | Autorização baseada em roles/políticas    |
+| Nodemailer         | Envio de e-mails via SMTP (Titan Mail)    |
+| Handlebars         | Templates de e-mail (`/templates`)        |
+| sharp              | Processamento e compressão de imagens     |
+| AWS S3 / GCP       | Storage em nuvem (selecionável via env)   |
+| fast-xml-parser    | Parsing de XML (débitos veiculares)       |
+| Swagger / OpenAPI  | Documentação interativa da API            |
+| pnpm               | Gerenciador de pacotes                    |
+| Biome + ESLint     | Lint e formatação                         |
+| Jest               | Testes unitários                          |
 
 ---
 
-## Padrões e Convenções
+## Arquitetura
 
-- **Linguagem:** TypeScript
-- **Framework:** NestJS
-- **ORM:** TypeORM
-- **Validação:** class-validator
-- **Autenticação:** JWT (Bearer Token)
-- **Documentação:** Swagger (OpenAPI)
-- **Lint/Format:** Biome, Prettier, ESLint (Airbnb)
-- **Commits:** Conventional Commits (`feat:`, `fix:`, `chore:`, etc.)
-
-### Estrutura de Pastas
+O projeto segue a estrutura modular do NestJS. Cada domínio é um módulo independente com controller, service, repository, entity e DTOs próprios.
 
 ```
 src/
-  auth/           # Autenticação e login
-  users/          # Usuários, DTOs, entidades, repositórios
-  code-validations/ # Validação de códigos (ex: e-mail)
-  mailer/         # Envio de e-mails
-  common/         # Utilitários, enums, helpers
-  casl/           # Controle de permissões (CASL)
-  database/       # Configuração do banco
-  jwt/            # Estratégias e decorators JWT
+  auth/               # Login, recuperação de senha, Google SSO, MFA
+  users/              # CRUD de usuários, upload de foto
+  vehicle-debts/      # Consulta de débitos veiculares com juros e opções de pagamento
+  code-validations/   # Códigos de validação por e-mail
+  casl/               # Políticas de permissão (RBAC)
+  jwt/                # Guards, estratégia e decorators JWT
+  storage/            # Abstração de storage: local / S3 / GCP
+  mailer/             # Configuração do módulo de e-mail
+  database/           # Conexão TypeORM e seeders
+  env/                # Validação de variáveis de ambiente
+  common/             # Enums, entidades base, paginação, utilitários
 ```
 
-### Convenções de Código
+### Entidade base
 
-- Use `PascalCase` para classes e entidades.
-- Use `camelCase` para variáveis e métodos.
-- DTOs terminam com `Dto` (ex: `CreateUserDto`).
-- Controllers terminam com `Controller`.
-- Services terminam com `Service`.
-- Use decorators do NestJS para validação e autenticação.
+Todas as entidades de domínio estendem `EntityBase`, que provê:
+- `id` (UUID v4)
+- `created_at`, `updated_at`, `deleted_at` (soft delete)
+- `created_by`, `updated_by`, `deleted_by` (UUID do responsável)
+
+### Roles
+
+| Role        | Permissões                          |
+|-------------|-------------------------------------|
+| `SUPERADMIN`| Acesso total                        |
+| `ADMIN`     | Acesso total                        |
+| `CUSTOMER`  | Somente leitura em `User`           |
 
 ---
 
-## Instalação
+## Módulos
+
+### AuthModule
+
+Responsável por todo o fluxo de autenticação:
+
+- Login com e-mail/senha
+- Recuperação de senha via código por e-mail
+- Validação de código de primeiro acesso
+- Login com Google via OpenID Connect
+- Inicialização, verificação e confirmação de MFA (TOTP)
+
+### UserModule
+
+CRUD completo de usuários com:
+
+- Upload de foto via `multipart/form-data`
+- Processamento automático de imagem (compressão + redimensionamento)
+- Paginação na listagem
+- Checagem de disponibilidade de e-mail
+- Soft delete com rastreabilidade
+
+### VehicleDebtsModule
+
+Consulta de débitos veiculares por placa:
+
+- Aceita placas no formato antigo (`ABC1234`) e Mercosul (`ABC1D23`)
+- Arquitetura de **provider chain**: tenta provedores em cascata, retorna 503 se todos falharem
+- Calcula juros sobre os débitos
+- Gera opções de pagamento: Pix (5% de desconto) e cartão de crédito (1x, 6x, 12x)
+- Agrupamento de opções por tipo de débito
+
+### CodeValidationModule
+
+Gerencia códigos temporários enviados por e-mail para:
+- Primeiro acesso do usuário
+- Recuperação de senha
+
+### StorageModule
+
+Abstração de storage com três implementações selecionáveis via `STORAGE_TYPE`:
+- `local` — salva em disco (`./uploads`)
+- `s3` — AWS S3
+- `gcp` — Google Cloud Storage
+
+Inclui processamento de imagem via `sharp`:
+- Redimensionamento máximo de 1920×1920px
+- Conversão para JPEG com qualidade configurável
+- Thumbnail 300×300px (crop centralizado)
+
+---
+
+## Endpoints
+
+### Auth
+
+| Método | Rota                       | Auth     | Descrição                                  |
+|--------|----------------------------|----------|--------------------------------------------|
+| POST   | `/login`                   | Público  | Login com e-mail e senha                   |
+| POST   | `/send-code-recovery-password` | Público | Envia código de recuperação por e-mail |
+| POST   | `/validate-code`           | Público  | Valida código de primeiro acesso/recuperação |
+| PATCH  | `/recover-password`        | Público  | Redefine a senha com o código validado     |
+| GET    | `/google`                  | Público  | Inicia fluxo de login com Google           |
+| GET    | `/auth/google/callback`    | Público  | Callback OAuth do Google                   |
+| POST   | `/mfa/initialize`          | Bearer   | Inicializa MFA (retorna secret + QR code)  |
+| POST   | `/mfa/verifyInitialize`    | Bearer   | Confirma o código TOTP e ativa o MFA       |
+| POST   | `/mfa/confirm`             | Público  | Confirma o MFA e retorna o accessToken     |
+
+### Users
+
+| Método | Rota                  | Auth   | Permissão           | Descrição                         |
+|--------|-----------------------|--------|---------------------|-----------------------------------|
+| POST   | `/users`              | Bearer | `CREATE User`       | Cria novo usuário (com foto)      |
+| GET    | `/users`              | Bearer | qualquer autenticado | Lista usuários com paginação     |
+| GET    | `/users/:id`          | Bearer | qualquer autenticado | Busca usuário por ID             |
+| PUT    | `/users/:id`          | Bearer | `UPDATE User`       | Atualiza usuário (com foto)       |
+| DELETE | `/users/:id`          | Bearer | `DELETE User`       | Remove usuário (soft delete)      |
+| GET    | `/users/check/:email` | Bearer | qualquer autenticado | Verifica disponibilidade de e-mail |
+
+### Vehicle Debts
+
+| Método | Rota                      | Auth   | Descrição                                             |
+|--------|---------------------------|--------|-------------------------------------------------------|
+| GET    | `/vehicle-debts/:plate`   | Bearer | Consulta débitos, juros e opções de pagamento da placa |
+
+**Exemplo de resposta:**
+```json
+{
+  "placa": "ABC1234",
+  "debitos": [
+    { "tipo": "IPVA", "valor_original": "350.00", "valor_atualizado": "378.00" }
+  ],
+  "opcoes_pagamento": {
+    "opcoes": [
+      {
+        "tipo": "TOTAL",
+        "valor_base": "378.00",
+        "pix": { "total_com_desconto": "359.10" },
+        "cartao_credito": {
+          "parcelas": [
+            { "quantidade": 1, "valor_parcela": "378.00" },
+            { "quantidade": 6, "valor_parcela": "67.63" },
+            { "quantidade": 12, "valor_parcela": "35.64" }
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Autenticação e Autorização
+
+### JWT
+
+- Todas as rotas protegidas exigem `Authorization: Bearer <token>` no header.
+- Rotas públicas são marcadas com o decorator `@Public()`.
+- O guard global `JwtAuthGuard` aplica a proteção automaticamente.
+
+### CASL
+
+Permissões são definidas em `casl-ability.factory.ts` com base no `role` do usuário e aplicadas via:
+- Guard: `PoliciesGuard`
+- Decorator: `@CheckPolicies((ability) => ability.can(Action.CREATE, User))`
+
+Ações disponíveis: `CREATE`, `READ`, `UPDATE`, `DELETE`, `MANAGE`.
+
+### MFA (TOTP)
+
+Fluxo de MFA quando habilitado para o usuário:
+
+1. `POST /login` → retorna `{ mfa_required: true, mfa_token: "..." }` em vez do accessToken
+2. Usuário digita o código do autenticador
+3. `POST /mfa/confirm` com o `mfa_token` e o `code` → retorna o accessToken final
+
+### Google OAuth / OpenID Connect
+
+1. Redirecionar o usuário para `GET /google`
+2. Após autenticação no Google, o callback `GET /auth/google/callback` processa o token
+3. Retorna o mesmo `LoginResponseDto` do login convencional
+
+---
+
+## Variáveis de Ambiente
+
+Crie um arquivo `.env` na raiz do projeto. Variáveis obrigatórias estão marcadas com *.
+
+```env
+# Servidor
+PORT=3333                          # Padrão: 3000
+
+# Banco de Dados
+POSTGRES_HOST=localhost *
+POSTGRES_PORT=5432
+POSTGRES_USER=docktest *
+POSTGRES_PASSWORD=sua_senha *
+POSTGRES_DB=dockDespachante *
+POSTGRES_SCHEMA=public             # Padrão: public
+DB_SOCKET=false *
+
+# JWT
+JWT_SECRET=sua_chave_secreta *
+JWT_EXPIRES_IN=3600s *
+
+# Frontend
+URL_FRONT=http://localhost *
+
+# E-mail (SMTP)
+EMAIL_HOST=smtp.titan.email *
+EMAIL_PORT=465 *
+EMAIL_USERNAME=no-reply@dominio.com *
+EMAIL_PASSWORD=sua_senha *
+
+# Branding (e-mails e templates)
+LOGO_URL=https://dominio.com/logo.png
+URL_SUPPORT=https://dominio.com/support
+COMPANY_NAME=Dock Despachante
+
+# Google OAuth (opcional)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_CALLBACK_URL=http://localhost:3333/auth/google/callback
+
+# Storage
+STORAGE_TYPE=local                 # local | s3 | gcp (padrão: local)
+LOCAL_STORAGE_PATH=./uploads       # Padrão: ./uploads
+LOCAL_STORAGE_BASE_URL=/uploads    # Padrão: /uploads
+
+# Processamento de Imagens
+IMAGE_QUALITY=80                   # 1-100 (padrão: 80)
+IMAGE_COMPRESSION_ENABLED=true     # true | false (padrão: true)
+
+# AWS S3 (se STORAGE_TYPE=s3)
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=us-east-1               # Padrão: us-east-1
+AWS_S3_BUCKET_NAME=
+AWS_S3_BASE_URL=                   # URL base customizada (ex: CloudFront)
+
+# Google Cloud Storage (se STORAGE_TYPE=gcp)
+GCP_PROJECT_ID=
+GCP_BUCKET_NAME=
+GCP_KEY_FILENAME=                  # Caminho para arquivo credentials.json
+GCP_CREDENTIALS=                   # Ou credenciais como string JSON
+```
+
+---
+
+## Instalação e Execução
+
+### Pré-requisitos
+
+- Node.js 20+
+- pnpm 9+
+- PostgreSQL 15+
+
+### Passos
 
 ```bash
-git clone <repo>
-cd api-backend
-npm install
+# 1. Clonar o repositório
+git clone <repo-url>
+cd api
+
+# 2. Instalar dependências
+pnpm install
+
+# 3. Configurar variáveis de ambiente
+cp .env.example .env
+# edite o .env com suas credenciais
+
+# 4. Subir o banco (se usar Docker)
+docker run --name dock-pg -e POSTGRES_PASSWORD=sua_senha -p 5432:5432 -d postgres:15
+
+# 5. Rodar os seeders (cria usuário admin inicial)
+pnpm seed
+
+# 6. Iniciar em modo desenvolvimento
+pnpm start:dev
 ```
 
----
-
-## Configuração
-
-Crie um arquivo `.env` na raiz com as variáveis necessárias:
-
-```
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=erp_igreja
-JWT_SECRET=your_jwt_secret
-EMAIL_HOST=smtp.example.com
-EMAIL_PORT=587
-EMAIL_USERNAME=your@email.com
-EMAIL_PASSWORD=yourpassword
-```
-
----
-
-## Google OAuth
-
-2.  Crie um Client ID na Google Console:
-    Vá em https://console.cloud.google.com/
-
-Crie um projeto ou selecione um existente
-
-Vá em APIs e serviços > Credenciais
-
-Clique em Criar credencial > ID do cliente OAuth
-
-Tipo de aplicativo: Aplicativo da Web
-
-Adicione o URI de redirecionamento (ex: http://localhost:3000/auth/google/redirect)
-
-Para criar o secretkey, siga as instruções da Google Console ao criar o OAuth Client ID.
+A API estará disponível em `http://localhost:3333`.
 
 ---
 
 ## Scripts
 
-- `npm run start:dev` — inicia em modo desenvolvimento
-- `npm run build` — build do projeto
-- `npm run test` — executa testes
-- `npm run format` — formata o código com Biome
-- `npm run lint` — lint do código
-- `npm run seed` — roda os seeders (/src/database/run-seeder.ts)
+| Comando            | Descrição                                          |
+|--------------------|----------------------------------------------------|
+| `pnpm start:dev`   | Inicia com hot-reload                              |
+| `pnpm start:prod`  | Inicia a versão compilada (`dist/main`)            |
+| `pnpm build`       | Compila o projeto TypeScript                       |
+| `pnpm test`        | Executa todos os testes unitários                  |
+| `pnpm test:cov`    | Executa testes com relatório de cobertura          |
+| `pnpm test:watch`  | Testes em modo watch                               |
+| `pnpm test:e2e`    | Testes end-to-end                                  |
+| `pnpm format`      | Formata o código com Biome                         |
+| `pnpm lint`        | Lint do código com Biome                           |
+| `pnpm seed`        | Executa os seeders do banco de dados               |
+| `pnpm make:entity` | Gera scaffold de uma nova entidade                 |
+
+---
+
+## Storage e Processamento de Imagens
+
+### Configuração AWS S3
+
+```env
+STORAGE_TYPE=s3
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+AWS_S3_BUCKET_NAME=meu-bucket
+# Opcional: CDN/CloudFront
+AWS_S3_BASE_URL=https://cdn.meudominio.com
+```
+
+### Configuração GCP
+
+**Opção 1 — Arquivo de credenciais:**
+```env
+STORAGE_TYPE=gcp
+GCP_PROJECT_ID=meu-projeto
+GCP_BUCKET_NAME=meu-bucket
+GCP_KEY_FILENAME=./credentials.json
+```
+
+**Opção 2 — Credenciais inline (útil em containers):**
+```env
+GCP_CREDENTIALS={"type":"service_account","project_id":"..."}
+```
+
+**Opção 3 — Application Default Credentials:**  
+Omita `GCP_KEY_FILENAME` e `GCP_CREDENTIALS`; o SDK usará as credenciais do ambiente GCP automaticamente.
+
+### Como funciona o upload de foto
+
+Ao criar ou atualizar um usuário com o campo `photo` (multipart/form-data):
+
+1. A imagem é recebida via `FileInterceptor`
+2. O `ImageProcessingService` processa com `sharp`:
+   - Redimensiona para no máximo 1920×1920px (mantendo proporção)
+   - Converte para JPEG com qualidade `IMAGE_QUALITY`
+   - Gera um thumbnail 300×300px (crop centralizado)
+3. O storage configurado (`local`, `s3` ou `gcp`) armazena os arquivos
+4. A URL da imagem é salva em `user.photo_url`
+
+```bash
+# Exemplo de upload via curl
+curl -X PUT http://localhost:3333/users/<id> \
+  -H "Authorization: Bearer <token>" \
+  -F "photo=@/caminho/para/foto.jpg"
+```
+
+### Estrutura do módulo
+
+```
+src/storage/
+  interfaces/
+    storage.interface.ts           # Contrato IStorageService
+  services/
+    local-storage.service.ts       # Implementação local
+    s3-storage.service.ts          # Implementação AWS S3
+    gcp-storage.service.ts         # Implementação GCP
+    image-processing.service.ts    # Compressão e thumbnails com sharp
+  storage.controller.ts
+  storage.module.ts
+```
+
+---
+
+## Gerador de Entidades
+
+O projeto inclui um scaffold que gera todos os arquivos de um módulo de domínio de forma padronizada.
+
+```bash
+pnpm make:entity <NomeDaEntidade>
+```
+
+**Exemplo:**
+
+```bash
+pnpm make:entity Proposal
+```
+
+**Arquivos gerados em `src/proposal/`:**
+
+```
+src/proposal/
+  dto/
+    create-proposal.dto.ts
+    update-proposal.dto.ts
+  proposal.controller.ts
+  proposal.service.ts
+  proposal.service.spec.ts
+  proposal.repository.ts
+  proposal.interface.ts
+  proposal.entity.ts
+  proposal.module.ts
+```
+
+Após gerar, importe o módulo em `app.module.ts` e adicione a entidade ao `database.module.ts`.
+
+---
+
+## Testes
+
+Os testes unitários usam **Jest** com **SWC** como transpilador (mais rápido que `ts-jest`).
+
+```bash
+# Rodar todos os testes
+pnpm test
+
+# Com cobertura
+pnpm test:cov
+
+# Arquivo específico
+pnpm test -- user.service
+```
+
+Factories de teste ficam em `src/testing/factories/` (ex: `make-user.ts` usando `@faker-js/faker`).
 
 ---
 
 ## Padrão de Commits
 
-- `feat:` Nova funcionalidade
-- `fix:` Correção de bug
-- `chore:` Tarefas de manutenção
-- `docs:` Documentação
-- `refactor:` Refatoração de código
-- `test:` Testes
+O projeto usa [Conventional Commits](https://www.conventionalcommits.org/):
 
-Exemplo:
+| Prefixo      | Quando usar                          |
+|--------------|--------------------------------------|
+| `feat:`      | Nova funcionalidade                  |
+| `fix:`       | Correção de bug                      |
+| `refactor:`  | Refatoração sem mudança de comportamento |
+| `test:`      | Adição ou correção de testes         |
+| `chore:`     | Tarefas de manutenção, config        |
+| `docs:`      | Documentação                         |
+| `perf:`      | Melhoria de performance              |
 
+**Exemplo:**
 ```
-feat(user): add user registration endpoint
+feat(vehicle-debts): add payment options with PIX discount
 ```
-
----
-
-## Padrão de Rotas
-
-- Todas as rotas protegidas usam Bearer Token (`Authorization: Bearer <token>`)
-- Use o botão "Authorize" no Swagger para autenticar
 
 ---
 
 ## Swagger
 
-Acesse a documentação interativa em:  
-`http://localhost:3000/api/docs`
-
----
-
-## Licença
-
-Este projeto é privado e não possui licença aberta.
-
----
-
-## Documentação Técnica
-
-Este projeto é uma API backend para um sistema de gestão de igreja, construída com NestJS, TypeORM, PostgreSQL e CASL para permissões. Abaixo você encontrará detalhes técnicos para ajudar qualquer desenvolvedor a entender e contribuir para a base de código.
-
----
-
-### Visão Geral da Arquitetura
-
-- **Framework:** [NestJS](https://nestjs.com/) (modular, injeção de dependência, escalável)
-- **Banco de Dados:** PostgreSQL (via TypeORM)
-- **Autenticação:** JWT (Bearer Token)
-- **Autorização:** CASL (baseada em função e política)
-- **Email:** Nodemailer via @nestjs-modules/mailer
-- **Validação:** class-validator, class-transformer
-- **Docs da API:** Swagger (OpenAPI)
-
----
-
-### Principais Pastas & Responsabilidades
-
-- `src/auth/` — Lógica de autenticação, login, estratégia JWT, Google OAuth
-- `src/users/` — Entidade de usuário, DTOs, serviço, controlador, repositório
-- `src/code-validations/` — Validação de código para ações do usuário (ex: verificação de e-mail)
-- `src/mailer/` — Módulo e configuração de envio de e-mails
-- `src/common/` — Utilitários compartilhados, enums, helpers, classes base
-- `src/casl/` — Sistema de permissões (CASL), guards, fábrica de habilidades
-- `src/database/` — Conexão e provedores do banco de dados
-- `src/jwt/` — Decoradores, guards e helpers JWT
-- `src/storage/` — Serviços de armazenamento (GCP, S3), processamento de imagens e compressão
-
----
-
-### Principais Convenções
-
-- **DTOs:** Todos os objetos de transferência de dados terminam com `Dto` (ex: `CreateUserDto`).
-- **Controllers:** Terminam com `Controller` e são responsáveis pela camada HTTP.
-- **Services:** Terminam com `Service` e contêm a lógica de negócio.
-- **Repositories:** Repositórios personalizados para consultas e lógica avançadas.
-- **Guards:** Usados para autenticação e autorização (ex: `PoliciesGuard`).
-- **Decorators:** Decoradores personalizados para rotas públicas, políticas, etc.
-
----
-
-### Autenticação & Autorização
-
-- **JWT:** Todas as rotas protegidas requerem um token Bearer no cabeçalho `Authorization`.
-- **CASL:** As permissões são definidas em `casl-ability.factory.ts` e aplicadas via `PoliciesGuard` e decorador `@CheckPolicies`.
-- **Swagger:** Use o botão "Authorize" para definir seu JWT para testar endpoints protegidos.
-
----
-
-### Variáveis de Ambiente
-
-Toda a configuração sensível é gerenciada via arquivo `.env`. Exemplo:
+A documentação interativa da API está disponível em:
 
 ```
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=erp_igreja
-JWT_SECRET=your_jwt_secret
-EMAIL_HOST=smtp.example.com
-EMAIL_PORT=587
-EMAIL_USERNAME=your@email.com
-EMAIL_PASSWORD=yourpassword
-
-# Storage Configuration
-STORAGE_TYPE=s3
-IMAGE_QUALITY=80
-IMAGE_COMPRESSION_ENABLED=true
-
-# AWS S3 (se STORAGE_TYPE=s3)
-AWS_ACCESS_KEY_ID=your_aws_access_key_id
-AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
-AWS_REGION=us-east-1
-AWS_S3_BUCKET_NAME=your_bucket_name
-
-# GCP (se STORAGE_TYPE=gcp)
-GCP_PROJECT_ID=your_gcp_project_id
-GCP_BUCKET_NAME=your_gcp_bucket_name
-GCP_KEY_FILENAME=path/to/credentials.json
+http://localhost:3333/api/docs
 ```
 
----
+Para testar endpoints protegidos, clique em **Authorize** e informe o Bearer token obtido no login.
 
-### Configuração do Google OAuth
-
-1. Acesse https://console.cloud.google.com/
-2. Crie ou selecione um projeto
-3. Vá para APIs & Serviços > Credenciais
-4. Clique em "Criar Credenciais" > ID do Cliente OAuth
-5. Tipo de aplicativo: Aplicativo Web
-6. Adicione o URI de redirecionamento (ex: `http://localhost:3000/auth/google/redirect`)
-7. Use o ID e a chave secreta gerados no seu arquivo `.env`
-
----
-
-### Sistema de Armazenamento e Processamento de Imagens
-
-O boilerplate inclui um sistema completo de upload, compressão e geração de thumbnails para imagens, com suporte para AWS S3 e Google Cloud Storage (GCP).
-
-#### Funcionalidades
-
-- **Compressão automática de imagens**: Reduz o tamanho das imagens durante o upload
-- **Geração automática de thumbnails**: Cria versões menores das imagens automaticamente
-- **Suporte a múltiplos providers**: AWS S3 e Google Cloud Storage
-- **Configurável**: Pode desabilitar compressão se necessário
-- **Integração transparente**: Funciona automaticamente nos métodos de criação e edição
-
-#### Configuração
-
-##### AWS S3
-
-1. Configure as variáveis de ambiente no `.env`:
-```env
-STORAGE_TYPE=s3
-AWS_ACCESS_KEY_ID=your_aws_access_key_id
-AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
-AWS_REGION=us-east-1
-AWS_S3_BUCKET_NAME=your_bucket_name
-# Opcional: URL base customizada (ex: CloudFront)
-AWS_S3_BASE_URL=https://your-cloudfront-url.com
-```
-
-2. Certifique-se de que o bucket S3 está configurado com permissões públicas de leitura (ou use uma política apropriada)
-
-##### Google Cloud Storage (GCP)
-
-1. Crie um projeto no Google Cloud Platform
-2. Habilite a API do Cloud Storage
-3. Crie um bucket
-4. Configure as credenciais de uma das seguintes formas:
-
-   **Opção 1: Arquivo de credenciais JSON**
-   ```env
-   STORAGE_TYPE=gcp
-   GCP_PROJECT_ID=your_project_id
-   GCP_BUCKET_NAME=your_bucket_name
-   GCP_KEY_FILENAME=path/to/credentials.json
-   ```
-
-   **Opção 2: Credenciais como string JSON**
-   ```env
-   STORAGE_TYPE=gcp
-   GCP_PROJECT_ID=your_project_id
-   GCP_BUCKET_NAME=your_bucket_name
-   GCP_CREDENTIALS={"type":"service_account","project_id":"..."}
-   ```
-
-   **Opção 3: Application Default Credentials (ADC)**
-   ```env
-   STORAGE_TYPE=gcp
-   GCP_PROJECT_ID=your_project_id
-   GCP_BUCKET_NAME=your_bucket_name
-   ```
-   Neste caso, o sistema usará as credenciais padrão do ambiente GCP.
-
-#### Configuração de Processamento de Imagens
-
-```env
-# Qualidade da imagem (1-100, padrão: 80)
-IMAGE_QUALITY=80
-
-# Habilitar compressão (true/false, padrão: true)
-IMAGE_COMPRESSION_ENABLED=true
-```
-
-#### Como Usar
-
-O sistema está integrado automaticamente nos endpoints de criação e edição de usuários. Ao fazer upload de uma imagem:
-
-1. **Upload via multipart/form-data**: Envie o arquivo no campo `photo`
-2. **Processamento automático**: A imagem será:
-   - Comprimida (se `IMAGE_COMPRESSION_ENABLED=true`)
-   - Redimensionada para máximo de 1920x1920px (mantendo proporção)
-   - Convertida para JPEG com qualidade configurável
-   - Gerado um thumbnail de 300x300px (crop centralizado)
-
-3. **Armazenamento**: A imagem original e o thumbnail são salvos no storage configurado
-
-#### Exemplo de Uso
-
-**Criar usuário com foto:**
-```bash
-curl -X POST http://localhost:3000/users \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "name=John" \
-  -F "surname=Doe" \
-  -F "email=john@example.com" \
-  -F "role=CUSTOMER" \
-  -F "photo=@/path/to/image.jpg"
-```
-
-**Atualizar foto do usuário:**
-```bash
-curl -X PUT http://localhost:3000/users/USER_ID \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "photo=@/path/to/new-image.jpg"
-```
-
-#### Estrutura do Módulo de Storage
-
-```
-src/storage/
-  ├── interfaces/
-  │   └── storage.interface.ts      # Interface abstrata para serviços de storage
-  ├── services/
-  │   ├── gcp-storage.service.ts    # Implementação para Google Cloud Storage
-  │   ├── s3-storage.service.ts     # Implementação para AWS S3
-  │   └── image-processing.service.ts # Serviço de compressão e thumbnails
-  └── storage.module.ts             # Módulo NestJS com providers
-```
-
-#### Desabilitar Compressão
-
-Se você não quiser comprimir as imagens, configure:
-
-```env
-IMAGE_COMPRESSION_ENABLED=false
-```
-
-As imagens ainda serão redimensionadas e os thumbnails serão gerados, mas sem compressão adicional.
-
----
-
-### Execução & Desenvolvimento
-
-- `npm run start:dev` — Inicia em modo de desenvolvimento (auto-reload)
-- `npm run build` — Compila o projeto
-- `npm run test` — Executa os testes
-- `npm run format` — Formata o código com Biome
-- `npm run lint` — Analisa o código
-
----
-
-### Estilo de Commit & Código
-
-- Use [Commits Convencionais](https://www.conventionalcommits.org/)
-- Formate e analise antes de enviar
-- Mantenha os controllers enxutos, coloque a lógica nos serviços
-- Use DTOs para toda validação de entrada
-
----
-
-### Documentação da API
-
-- Swagger UI: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
-- Todos os endpoints, modelos e fluxos de autenticação estão documentados lá.
-
----
-
-### Licença
-
-Este projeto é privado e não possui uma licença aberta.
-
----
-
-Para quaisquer dúvidas, consulte os comentários do código, siga a estrutura de pastas e use os scripts e convenções fornecidos. Se você precisar estender o sistema, siga os padrões existentes para módulos, serviços, controllers e DTOs.
-
----
-
-## Gerando entidades automaticamente
-
-Este projeto possui um gerador de entidades no NestJS.
-O comando cria **controller, service, repository, interface, entity, module e DTOs** de forma padronizada.
-
-### Como usar
-
-```bash
-pnpm make:entity <EntityName>
-```
-
-Exemplo:
-
-```bash
-pnpm make:entity Product
-```
-
-### Estrutura gerada
-
-Ao rodar o comando acima, será criada a seguinte estrutura dentro de `src/product/`:
-
-```
-src/product/
-  ├── dto/
-  │   ├── create-product-dto.ts
-  │   └── update-product-dto.ts
-  ├── product.controller.ts
-  ├── product.service.ts
-  ├── product.service.spec.ts
-  ├── product.repository.ts
-  ├── product.interface.ts
-  ├── product.entity.ts
-  └── product.module.ts
-```
+A rota `/api/docs` é protegida por autenticação básica (HTTP Basic Auth) em produção — configure as credenciais conforme necessário.
