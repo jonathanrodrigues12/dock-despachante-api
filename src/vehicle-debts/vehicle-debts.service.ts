@@ -1,22 +1,41 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import {
-  IVehicleDebtsProvider,
-  VEHICLE_DEBTS_PROVIDER,
-} from './interfaces/vehicle-debts-provider.interface';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ProviderChainService } from './providers/provider-chain.service';
 import { VehicleDebtsResponseDto } from './dto/vehicle-debts-response.dto';
+import { enrichDebts, roundHalfUp } from './domain/interest.calculator';
+import { buildPaymentOptions } from './domain/payment.calculator';
 
 @Injectable()
 export class VehicleDebtsService {
-  constructor(
-    @Inject(VEHICLE_DEBTS_PROVIDER)
-    private readonly provider: IVehicleDebtsProvider,
-  ) {}
+  private readonly logger = new Logger(VehicleDebtsService.name);
+
+  constructor(private readonly chain: ProviderChainService) {}
 
   async getDebtsByPlate(plate: string): Promise<VehicleDebtsResponseDto> {
-    const result = await this.provider.getDebts(plate);
+    const refDate = process.env.REFERENCE_DATE
+      ? new Date(process.env.REFERENCE_DATE)
+      : new Date();
+
+    const result = await this.chain.getDebts(plate);
+
     if (!result) {
-      throw new NotFoundException(`Nenhum registro encontrado para a placa ${plate}`);
+      throw new NotFoundException({ error: 'plate_not_found', plate });
     }
-    return result;
+
+    const debitos = enrichDebts(result.debts, refDate);
+
+    const totalOriginal = result.debts.reduce((s, d) => s + d.amount, 0);
+    const totalAtualizado = debitos.reduce((s, d) => s + Number(d.valor_atualizado), 0);
+
+    this.logger.log(`Debts calculated for ${plate}: ${debitos.length} item(s)`);
+
+    return {
+      placa: result.plate,
+      debitos,
+      resumo: {
+        total_original: roundHalfUp(totalOriginal, 2).toFixed(2),
+        total_atualizado: roundHalfUp(totalAtualizado, 2).toFixed(2),
+      },
+      pagamentos: buildPaymentOptions(debitos),
+    };
   }
 }

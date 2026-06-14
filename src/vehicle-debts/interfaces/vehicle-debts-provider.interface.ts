@@ -1,7 +1,16 @@
-import { VehicleDebtsResponseDto } from '../dto/vehicle-debts-response.dto';
+export const VEHICLE_DEBTS_PROVIDERS = 'VEHICLE_DEBTS_PROVIDERS';
 
-export const VEHICLE_DEBTS_PROVIDER = 'VEHICLE_DEBTS_PROVIDER';
+export interface RawDebtRecord {
+  type: string;
+  amount: number;
+  due_date: string;
+}
+
+export interface ProviderResult {
+  plate: string;
+  debts: RawDebtRecord[];
+}
 
 export interface IVehicleDebtsProvider {
-  getDebts(plate: string): Promise<VehicleDebtsResponseDto | null>;
+  getDebts(plate: string): Promise<ProviderResult | null>;
 }
