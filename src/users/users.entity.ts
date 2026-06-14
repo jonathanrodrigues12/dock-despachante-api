@@ -54,14 +54,6 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   provider: AuthProvider;
 
-  @ApiProperty({ default: false })
-  @Column({ default: false })
-  mfaEnabled: boolean;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', nullable: true })
-  mfaSecret?: string;
-
   @ApiProperty({ required: false })
   @OneToMany(() => CodeValidation, (codeValidation) => codeValidation.user)
   codeValidations: CodeValidation[];

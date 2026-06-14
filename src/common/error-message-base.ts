@@ -3,10 +3,6 @@ import { ApiProperty } from '@nestjs/swagger';
 export enum AuthErrorMessage {
   INVALID_CODE = 'Invalid code',
   EXPIRED_CODE = 'Expired code',
-  INVALID_MFA_TOKEN = 'Invalid MFA token',
-  INVALID_MFA_CODE = 'Invalid MFA code',
-  MFA_NOT_CONFIGURED = 'MFA not configured',
-  MFA_ALREADY_ENABLED = 'MFA already enabled',
 }
 
 export enum UserErrorMessage {

@@ -1,6 +1,6 @@
 # Dock Despachante — API
 
-API backend da plataforma **Dock Despachante**, sistema SaaS para gestão de serviços de documentação veicular no Brasil.
+API backend da plataforma **Dock Despachante**, sistema para gestão de serviços de documentação veicular no Brasil.
 
 ## Sumário
 
@@ -12,7 +12,7 @@ API backend da plataforma **Dock Despachante**, sistema SaaS para gestão de ser
 - [Variáveis de Ambiente](#variáveis-de-ambiente)
 - [Instalação e Execução](#instalação-e-execução)
 - [Scripts](#scripts)
-- [Storage e Processamento de Imagens](#storage-e-processamento-de-imagens)
+- [Storage](#storage)
 - [Gerador de Entidades](#gerador-de-entidades)
 - [Testes](#testes)
 - [Padrão de Commits](#padrão-de-commits)
@@ -22,25 +22,24 @@ API backend da plataforma **Dock Despachante**, sistema SaaS para gestão de ser
 
 ## Stack
 
-| Tecnologia         | Uso                                       |
-|--------------------|-------------------------------------------|
-| NestJS 11          | Framework principal                       |
-| TypeScript 5       | Linguagem                                 |
-| TypeORM 0.3        | ORM                                       |
-| PostgreSQL         | Banco de dados (`dockDespachante`)        |
-| JWT + Passport     | Autenticação stateless                    |
-| Google OAuth2 (OIDC) | Login social                            |
-| speakeasy / qrcode | MFA via TOTP                              |
-| CASL               | Autorização baseada em roles/políticas    |
-| Nodemailer         | Envio de e-mails via SMTP (Titan Mail)    |
-| Handlebars         | Templates de e-mail (`/templates`)        |
-| sharp              | Processamento e compressão de imagens     |
-| AWS S3 / GCP       | Storage em nuvem (selecionável via env)   |
-| fast-xml-parser    | Parsing de XML (débitos veiculares)       |
-| Swagger / OpenAPI  | Documentação interativa da API            |
-| pnpm               | Gerenciador de pacotes                    |
-| Biome + ESLint     | Lint e formatação                         |
-| Jest               | Testes unitários                          |
+| Tecnologia           | Uso                                       |
+|----------------------|-------------------------------------------|
+| NestJS 11            | Framework principal                       |
+| TypeScript 5         | Linguagem                                 |
+| TypeORM 0.3          | ORM                                       |
+| PostgreSQL           | Banco de dados (`dockDespachante`)        |
+| JWT + Passport       | Autenticação stateless                    |
+| Google OAuth2 (OIDC) | Login social                              |
+| speakeasy / qrcode   | MFA via TOTP                              |
+| CASL                 | Autorização baseada em roles/políticas    |
+| Nodemailer           | Envio de e-mails via SMTP (Titan Mail)    |
+| Handlebars           | Templates de e-mail (`/templates`)        |
+| AWS S3 / GCP         | Storage em nuvem (selecionável via env)   |
+| fast-xml-parser      | Parsing de XML (débitos veiculares)       |
+| Swagger / OpenAPI    | Documentação interativa da API            |
+| pnpm                 | Gerenciador de pacotes                    |
+| Biome + ESLint       | Lint e formatação                         |
+| Jest                 | Testes unitários                          |
 
 ---
 
@@ -51,7 +50,7 @@ O projeto segue a estrutura modular do NestJS. Cada domínio é um módulo indep
 ```
 src/
   auth/               # Login, recuperação de senha, Google SSO, MFA
-  users/              # CRUD de usuários, upload de foto
+  users/              # CRUD de usuários
   vehicle-debts/      # Consulta de débitos veiculares com juros e opções de pagamento
   code-validations/   # Códigos de validação por e-mail
   casl/               # Políticas de permissão (RBAC)
@@ -96,8 +95,6 @@ Responsável por todo o fluxo de autenticação:
 
 CRUD completo de usuários com:
 
-- Upload de foto via `multipart/form-data`
-- Processamento automático de imagem (compressão + redimensionamento)
 - Paginação na listagem
 - Checagem de disponibilidade de e-mail
 - Soft delete com rastreabilidade
@@ -125,45 +122,40 @@ Abstração de storage com três implementações selecionáveis via `STORAGE_TY
 - `s3` — AWS S3
 - `gcp` — Google Cloud Storage
 
-Inclui processamento de imagem via `sharp`:
-- Redimensionamento máximo de 1920×1920px
-- Conversão para JPEG com qualidade configurável
-- Thumbnail 300×300px (crop centralizado)
-
 ---
 
 ## Endpoints
 
 ### Auth
 
-| Método | Rota                       | Auth     | Descrição                                  |
-|--------|----------------------------|----------|--------------------------------------------|
-| POST   | `/login`                   | Público  | Login com e-mail e senha                   |
-| POST   | `/send-code-recovery-password` | Público | Envia código de recuperação por e-mail |
-| POST   | `/validate-code`           | Público  | Valida código de primeiro acesso/recuperação |
-| PATCH  | `/recover-password`        | Público  | Redefine a senha com o código validado     |
-| GET    | `/google`                  | Público  | Inicia fluxo de login com Google           |
-| GET    | `/auth/google/callback`    | Público  | Callback OAuth do Google                   |
-| POST   | `/mfa/initialize`          | Bearer   | Inicializa MFA (retorna secret + QR code)  |
-| POST   | `/mfa/verifyInitialize`    | Bearer   | Confirma o código TOTP e ativa o MFA       |
-| POST   | `/mfa/confirm`             | Público  | Confirma o MFA e retorna o accessToken     |
+| Método | Rota                           | Auth    | Descrição                                    |
+|--------|--------------------------------|---------|----------------------------------------------|
+| POST   | `/login`                       | Público | Login com e-mail e senha                     |
+| POST   | `/send-code-recovery-password` | Público | Envia código de recuperação por e-mail       |
+| POST   | `/validate-code`               | Público | Valida código de primeiro acesso/recuperação |
+| PATCH  | `/recover-password`            | Público | Redefine a senha com o código validado       |
+| GET    | `/google`                      | Público | Inicia fluxo de login com Google             |
+| GET    | `/auth/google/callback`        | Público | Callback OAuth do Google                     |
+| POST   | `/mfa/initialize`              | Bearer  | Inicializa MFA (retorna secret + QR code)    |
+| POST   | `/mfa/verifyInitialize`        | Bearer  | Confirma o código TOTP e ativa o MFA         |
+| POST   | `/mfa/confirm`                 | Público | Confirma o MFA e retorna o accessToken       |
 
 ### Users
 
-| Método | Rota                  | Auth   | Permissão           | Descrição                         |
-|--------|-----------------------|--------|---------------------|-----------------------------------|
-| POST   | `/users`              | Bearer | `CREATE User`       | Cria novo usuário (com foto)      |
-| GET    | `/users`              | Bearer | qualquer autenticado | Lista usuários com paginação     |
-| GET    | `/users/:id`          | Bearer | qualquer autenticado | Busca usuário por ID             |
-| PUT    | `/users/:id`          | Bearer | `UPDATE User`       | Atualiza usuário (com foto)       |
-| DELETE | `/users/:id`          | Bearer | `DELETE User`       | Remove usuário (soft delete)      |
+| Método | Rota                  | Auth   | Permissão            | Descrição                          |
+|--------|-----------------------|--------|----------------------|------------------------------------|
+| POST   | `/users`              | Bearer | `CREATE User`        | Cria novo usuário                  |
+| GET    | `/users`              | Bearer | qualquer autenticado | Lista usuários com paginação       |
+| GET    | `/users/:id`          | Bearer | qualquer autenticado | Busca usuário por ID               |
+| PUT    | `/users/:id`          | Bearer | `UPDATE User`        | Atualiza usuário                   |
+| DELETE | `/users/:id`          | Bearer | `DELETE User`        | Remove usuário (soft delete)       |
 | GET    | `/users/check/:email` | Bearer | qualquer autenticado | Verifica disponibilidade de e-mail |
 
 ### Vehicle Debts
 
-| Método | Rota                      | Auth   | Descrição                                             |
-|--------|---------------------------|--------|-------------------------------------------------------|
-| GET    | `/vehicle-debts/:plate`   | Bearer | Consulta débitos, juros e opções de pagamento da placa |
+| Método | Rota                    | Auth   | Descrição                                              |
+|--------|-------------------------|--------|--------------------------------------------------------|
+| GET    | `/vehicle-debts/:plate` | Bearer | Consulta débitos, juros e opções de pagamento da placa |
 
 **Exemplo de resposta:**
 ```json
@@ -270,10 +262,6 @@ STORAGE_TYPE=local                 # local | s3 | gcp (padrão: local)
 LOCAL_STORAGE_PATH=./uploads       # Padrão: ./uploads
 LOCAL_STORAGE_BASE_URL=/uploads    # Padrão: /uploads
 
-# Processamento de Imagens
-IMAGE_QUALITY=80                   # 1-100 (padrão: 80)
-IMAGE_COMPRESSION_ENABLED=true     # true | false (padrão: true)
-
 # AWS S3 (se STORAGE_TYPE=s3)
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
@@ -328,23 +316,25 @@ A API estará disponível em `http://localhost:3333`.
 
 ## Scripts
 
-| Comando            | Descrição                                          |
-|--------------------|----------------------------------------------------|
-| `pnpm start:dev`   | Inicia com hot-reload                              |
-| `pnpm start:prod`  | Inicia a versão compilada (`dist/main`)            |
-| `pnpm build`       | Compila o projeto TypeScript                       |
-| `pnpm test`        | Executa todos os testes unitários                  |
-| `pnpm test:cov`    | Executa testes com relatório de cobertura          |
-| `pnpm test:watch`  | Testes em modo watch                               |
-| `pnpm test:e2e`    | Testes end-to-end                                  |
-| `pnpm format`      | Formata o código com Biome                         |
-| `pnpm lint`        | Lint do código com Biome                           |
-| `pnpm seed`        | Executa os seeders do banco de dados               |
-| `pnpm make:entity` | Gera scaffold de uma nova entidade                 |
+| Comando            | Descrição                                   |
+|--------------------|---------------------------------------------|
+| `pnpm start:dev`   | Inicia com hot-reload                       |
+| `pnpm start:prod`  | Inicia a versão compilada (`dist/main`)     |
+| `pnpm build`       | Compila o projeto TypeScript                |
+| `pnpm test`        | Executa todos os testes unitários           |
+| `pnpm test:cov`    | Executa testes com relatório de cobertura   |
+| `pnpm test:watch`  | Testes em modo watch                        |
+| `pnpm test:e2e`    | Testes end-to-end                           |
+| `pnpm format`      | Formata o código com Biome                  |
+| `pnpm lint`        | Lint do código com Biome                    |
+| `pnpm seed`        | Executa os seeders do banco de dados        |
+| `pnpm make:entity` | Gera scaffold de uma nova entidade          |
 
 ---
 
-## Storage e Processamento de Imagens
+## Storage
+
+Abstração de storage com três implementações selecionáveis via `STORAGE_TYPE`.
 
 ### Configuração AWS S3
 
@@ -354,8 +344,7 @@ AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=us-east-1
 AWS_S3_BUCKET_NAME=meu-bucket
-# Opcional: CDN/CloudFront
-AWS_S3_BASE_URL=https://cdn.meudominio.com
+AWS_S3_BASE_URL=https://cdn.meudominio.com  # Opcional: CDN/CloudFront
 ```
 
 ### Configuração GCP
@@ -376,36 +365,16 @@ GCP_CREDENTIALS={"type":"service_account","project_id":"..."}
 **Opção 3 — Application Default Credentials:**  
 Omita `GCP_KEY_FILENAME` e `GCP_CREDENTIALS`; o SDK usará as credenciais do ambiente GCP automaticamente.
 
-### Como funciona o upload de foto
-
-Ao criar ou atualizar um usuário com o campo `photo` (multipart/form-data):
-
-1. A imagem é recebida via `FileInterceptor`
-2. O `ImageProcessingService` processa com `sharp`:
-   - Redimensiona para no máximo 1920×1920px (mantendo proporção)
-   - Converte para JPEG com qualidade `IMAGE_QUALITY`
-   - Gera um thumbnail 300×300px (crop centralizado)
-3. O storage configurado (`local`, `s3` ou `gcp`) armazena os arquivos
-4. A URL da imagem é salva em `user.photo_url`
-
-```bash
-# Exemplo de upload via curl
-curl -X PUT http://localhost:3333/users/<id> \
-  -H "Authorization: Bearer <token>" \
-  -F "photo=@/caminho/para/foto.jpg"
-```
-
 ### Estrutura do módulo
 
 ```
 src/storage/
   interfaces/
-    storage.interface.ts           # Contrato IStorageService
+    storage.interface.ts        # Contrato IStorageService
   services/
-    local-storage.service.ts       # Implementação local
-    s3-storage.service.ts          # Implementação AWS S3
-    gcp-storage.service.ts         # Implementação GCP
-    image-processing.service.ts    # Compressão e thumbnails com sharp
+    local-storage.service.ts    # Implementação local
+    s3-storage.service.ts       # Implementação AWS S3
+    gcp-storage.service.ts      # Implementação GCP
   storage.controller.ts
   storage.module.ts
 ```
@@ -448,7 +417,7 @@ Após gerar, importe o módulo em `app.module.ts` e adicione a entidade ao `data
 
 ## Testes
 
-Os testes unitários usam **Jest** com **SWC** como transpilador (mais rápido que `ts-jest`).
+Os testes unitários usam **Jest** com **SWC** como transpilador.
 
 ```bash
 # Rodar todos os testes
@@ -469,15 +438,15 @@ Factories de teste ficam em `src/testing/factories/` (ex: `make-user.ts` usando 
 
 O projeto usa [Conventional Commits](https://www.conventionalcommits.org/):
 
-| Prefixo      | Quando usar                          |
-|--------------|--------------------------------------|
-| `feat:`      | Nova funcionalidade                  |
-| `fix:`       | Correção de bug                      |
-| `refactor:`  | Refatoração sem mudança de comportamento |
-| `test:`      | Adição ou correção de testes         |
-| `chore:`     | Tarefas de manutenção, config        |
-| `docs:`      | Documentação                         |
-| `perf:`      | Melhoria de performance              |
+| Prefixo     | Quando usar                               |
+|-------------|-------------------------------------------|
+| `feat:`     | Nova funcionalidade                       |
+| `fix:`      | Correção de bug                           |
+| `refactor:` | Refatoração sem mudança de comportamento  |
+| `test:`     | Adição ou correção de testes              |
+| `chore:`    | Tarefas de manutenção, config             |
+| `docs:`     | Documentação                              |
+| `perf:`     | Melhoria de performance                   |
 
 **Exemplo:**
 ```
@@ -495,5 +464,3 @@ http://localhost:3333/api/docs
 ```
 
 Para testar endpoints protegidos, clique em **Authorize** e informe o Bearer token obtido no login.
-
-A rota `/api/docs` é protegida por autenticação básica (HTTP Basic Auth) em produção — configure as credenciais conforme necessário.

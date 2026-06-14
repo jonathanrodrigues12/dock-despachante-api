@@ -10,8 +10,6 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../jwt/jwt.guard';
 
 import { CodeValidationModule } from '../code-validations/code-validation.module';
-import { GoogleModule } from './google/google.module';
-import { MfaService } from './mfa/mfa.service';
 import { CaslModule } from '../casl/casl.module';
 import { UserModule } from '../users/users.module';
 import { CustomMailerModule } from '@/mailer/mailer.module';
@@ -20,7 +18,6 @@ import { CustomMailerModule } from '@/mailer/mailer.module';
   imports: [
     CaslModule,
     PassportModule,
-    GoogleModule,
     CustomMailerModule,
     forwardRef(() => UserModule),
     forwardRef(() => CodeValidationModule),
@@ -44,7 +41,6 @@ import { CustomMailerModule } from '@/mailer/mailer.module';
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
-    MfaService,
   ],
   exports: [AuthService],
 })

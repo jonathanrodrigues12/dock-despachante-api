@@ -17,8 +17,6 @@ const mockUser: User = {
   isActive: true,
   role: Role.ADMIN,
   provider: AuthProvider.LOCAL,
-  mfaEnabled: false,
-  mfaSecret: undefined,
   codeValidations: [],
   created_at: new Date(),
   updated_at: new Date(),
