@@ -21,22 +21,22 @@ export class VehicleDebtsService {
       throw new NotFoundException({ error: 'plate_not_found', plate });
     }
 
-    const debitos = enrichDebts(result.debts, refDate);
+    const enrichedDebts = enrichDebts(result.debts, refDate);
 
     const totalOriginal = result.debts.reduce((s, d) => s + d.amount, 0);
-    const totalAtualizado = debitos.reduce((s, d) => s + Number(d.valor_atualizado), 0);
+    const totalUpdated = enrichedDebts.reduce((s, d) => s + Number(d.valor_atualizado), 0);
 
-    this.logger.log(`Debts calculated for ${plate}: ${debitos.length} item(s)`);
+    this.logger.log(`Debts calculated for ${plate}: ${enrichedDebts.length} item(s)`);
 
     return {
       placa: result.plate,
       provedor: result.provider,
-      debitos,
+      debitos: enrichedDebts,
       resumo: {
         total_original: roundHalfUp(totalOriginal, 2).toFixed(2),
-        total_atualizado: roundHalfUp(totalAtualizado, 2).toFixed(2),
+        total_atualizado: roundHalfUp(totalUpdated, 2).toFixed(2),
       },
-      pagamentos: buildPaymentOptions(debitos),
+      pagamentos: buildPaymentOptions(enrichedDebts),
     };
   }
 }

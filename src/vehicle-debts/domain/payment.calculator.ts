@@ -9,9 +9,9 @@ function pmt(base: number, rate: number, n: number): number {
   return (base * rate * factor) / (factor - 1);
 }
 
-function buildOption(tipo: string, base: number) {
+function buildOption(type: string, base: number) {
   return {
-    tipo,
+    tipo: type,
     valor_base: base.toFixed(2),
     pix: {
       total_com_desconto: roundHalfUp(base * (1 - PIX_DISCOUNT), 2).toFixed(2),
@@ -36,11 +36,11 @@ export function buildPaymentOptions(debits: EnrichedDebt[]) {
     return acc;
   }, {});
 
-  const opcoes = [buildOption('TOTAL', roundHalfUp(total, 2))];
+  const options = [buildOption('TOTAL', roundHalfUp(total, 2))];
 
-  for (const [tipo, subtotal] of Object.entries(byType)) {
-    opcoes.push(buildOption(`SOMENTE_${tipo}`, subtotal));
+  for (const [type, subtotal] of Object.entries(byType)) {
+    options.push(buildOption(`SOMENTE_${type}`, subtotal));
   }
 
-  return { opcoes };
+  return { opcoes: options };
 }
