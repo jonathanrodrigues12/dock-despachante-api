@@ -101,13 +101,79 @@ CRUD completo de usuários com:
 
 ### VehicleDebtsModule
 
-Consulta de débitos veiculares por placa:
+Consulta e simulação de pagamento de débitos veiculares por placa. Integra com múltiplos provedores externos (JSON e XML), normaliza os dados, aplica juros e gera opções de pagamento.
 
-- Aceita placas no formato antigo (`ABC1234`) e Mercosul (`ABC1D23`)
-- Arquitetura de **provider chain**: tenta provedores em cascata, retorna 503 se todos falharem
-- Calcula juros sobre os débitos
-- Gera opções de pagamento: Pix (5% de desconto) e cartão de crédito (1x, 6x, 12x)
-- Agrupamento de opções por tipo de débito
+#### Arquitetura interna
+
+```
+vehicle-debts/
+  domain/
+    interest.calculator.ts     # Regras de juros e enriquecimento dos débitos
+    payment.calculator.ts      # Cálculo de PIX e parcelas (Price/PMT)
+  providers/
+    provider-chain.service.ts  # Chain of Responsibility + retry + circuit breaker
+    mock-provider-a.service.ts # Adapter para resposta JSON
+    mock-provider-b.service.ts # Adapter para resposta XML (fast-xml-parser)
+  interfaces/
+    vehicle-debts-provider.interface.ts  # Porta IVehicleDebtsProvider
+  mocks/
+    provider-a.mock.json
+    provider-b.mock.xml
+  dto/
+    vehicle-debts-response.dto.ts
+  vehicle-debts.controller.ts  # Validação de placa + roteamento
+  vehicle-debts.service.ts     # Orquestração do fluxo
+  vehicle-debts.module.ts
+```
+
+#### Padrões utilizados
+
+| Padrão | Onde |
+|--------|------|
+| **Ports & Adapters** | `IVehicleDebtsProvider` é a porta; cada provider é um adaptador |
+| **Strategy** | Providers são estratégias intercambiáveis de integração |
+| **Adapter** | `MockProviderAService` (JSON→canônico) e `MockProviderBService` (XML→canônico) |
+| **Chain of Responsibility** | `ProviderChainService` itera providers em ordem com fallback |
+| **Circuit Breaker** | Estado por provider em memória; abre após N falhas, fecha após cooldown |
+
+#### Regras de negócio
+
+**Juros simples com arredondamento HALF_UP:**
+
+| Tipo | Taxa diária | Teto | Fórmula |
+|------|-------------|------|---------|
+| `IPVA` | `IPVA_DAILY_RATE` (0,33%) | `IPVA_MAX_RATE` (20% do valor original) | `min(valor × taxa × dias, valor × teto)` |
+| `MULTA` | `MULTA_DAILY_RATE` (1%) | Sem teto | `valor × taxa × dias` |
+
+- Débitos não vencidos (`dias_atraso ≤ 0`): juros = 0, `valor_atualizado = valor_original`
+- Tipo desconhecido: HTTP 422 `{ "error": "unknown_debt_type", "type": "<TIPO>" }`
+
+**Opções de pagamento geradas:**
+
+- `TOTAL` — soma de todos os débitos atualizados
+- `SOMENTE_<TIPO>` — subtotal por tipo (ex.: `SOMENTE_IPVA`, `SOMENTE_MULTA`)
+
+**PIX:** desconto de 5% sobre o `valor_base` de cada opção.
+
+**Cartão de crédito:** parcelas fixas em 1x (sem juros), 6x e 12x com amortização Price (PMT) a 2,5% a.m.
+
+#### Resiliência
+
+- **Fallback:** se um provider lança exceção, o chain tenta o próximo na ordem configurada
+- **Retry com exponential backoff:** cada provider é tentado `1 + PROVIDER_RETRY_ATTEMPTS` vezes; o delay entre tentativas dobra a cada falha (`PROVIDER_RETRY_DELAY_MS × 2ⁿ`)
+- **Circuit breaker:** após `CIRCUIT_BREAKER_THRESHOLD` falhas consecutivas o provider é ignorado pelo período de `CIRCUIT_BREAKER_COOLDOWN_MS`; ao expirar volta a HALF-OPEN e testa uma chamada
+
+#### Erros estruturados
+
+| HTTP | Payload | Condição |
+|------|---------|----------|
+| 400 | `{ "error": "invalid_plate" }` | Placa fora do padrão antigo ou Mercosul |
+| 422 | `{ "error": "unknown_debt_type", "type": "..." }` | Tipo de débito sem regra de juros |
+| 503 | `{ "error": "all_providers_unavailable" }` | Todos os providers falharam |
+
+#### Logs e LGPD
+
+Todos os logs mascaram a placa antes de exibir: `AB***34` — nenhum dado identificável é exposto nos logs estruturados.
 
 ### CodeValidationModule
 
@@ -157,24 +223,66 @@ Abstração de storage com três implementações selecionáveis via `STORAGE_TY
 |--------|-------------------------|--------|--------------------------------------------------------|
 | GET    | `/vehicle-debts/:plate` | Bearer | Consulta débitos, juros e opções de pagamento da placa |
 
-**Exemplo de resposta:**
+**Exemplo de resposta** (placa `ABC1234`, data de referência `2024-05-10`):
+
 ```json
 {
   "placa": "ABC1234",
   "debitos": [
-    { "tipo": "IPVA", "valor_original": "350.00", "valor_atualizado": "378.00" }
+    {
+      "tipo": "IPVA",
+      "valor_original": "1500.00",
+      "valor_atualizado": "1800.00",
+      "vencimento": "2024-01-10",
+      "dias_atraso": 121
+    },
+    {
+      "tipo": "MULTA",
+      "valor_original": "300.50",
+      "valor_atualizado": "555.93",
+      "vencimento": "2024-02-15",
+      "dias_atraso": 85
+    }
   ],
-  "opcoes_pagamento": {
+  "resumo": {
+    "total_original": "1800.50",
+    "total_atualizado": "2355.93"
+  },
+  "pagamentos": {
     "opcoes": [
       {
         "tipo": "TOTAL",
-        "valor_base": "378.00",
-        "pix": { "total_com_desconto": "359.10" },
+        "valor_base": "2355.93",
+        "pix": { "total_com_desconto": "2238.13" },
         "cartao_credito": {
           "parcelas": [
-            { "quantidade": 1, "valor_parcela": "378.00" },
-            { "quantidade": 6, "valor_parcela": "67.63" },
-            { "quantidade": 12, "valor_parcela": "35.64" }
+            { "quantidade": 1,  "valor_parcela": "2355.93" },
+            { "quantidade": 6,  "valor_parcela": "427.72"  },
+            { "quantidade": 12, "valor_parcela": "229.67"  }
+          ]
+        }
+      },
+      {
+        "tipo": "SOMENTE_IPVA",
+        "valor_base": "1800.00",
+        "pix": { "total_com_desconto": "1710.00" },
+        "cartao_credito": {
+          "parcelas": [
+            { "quantidade": 1,  "valor_parcela": "1800.00" },
+            { "quantidade": 6,  "valor_parcela": "326.79"  },
+            { "quantidade": 12, "valor_parcela": "175.48"  }
+          ]
+        }
+      },
+      {
+        "tipo": "SOMENTE_MULTA",
+        "valor_base": "555.93",
+        "pix": { "total_com_desconto": "528.13" },
+        "cartao_credito": {
+          "parcelas": [
+            { "quantidade": 1,  "valor_parcela": "555.93" },
+            { "quantidade": 6,  "valor_parcela": "100.93" },
+            { "quantidade": 12, "valor_parcela": "54.20"  }
           ]
         }
       }
@@ -274,6 +382,24 @@ GCP_PROJECT_ID=
 GCP_BUCKET_NAME=
 GCP_KEY_FILENAME=                  # Caminho para arquivo credentials.json
 GCP_CREDENTIALS=                   # Ou credenciais como string JSON
+
+# Débitos Veiculares — data de referência
+REFERENCE_DATE=2024-05-10T00:00:00Z  # Data fixa para cálculo de juros (omitir para usar data atual)
+
+# Débitos Veiculares — taxas de juros
+IPVA_DAILY_RATE=0.0033             # Taxa diária IPVA (padrão: 0,33%)
+IPVA_MAX_RATE=0.20                 # Teto de juros IPVA (padrão: 20% do valor original)
+MULTA_DAILY_RATE=0.01              # Taxa diária MULTA (padrão: 1%)
+
+# Débitos Veiculares — resiliência de providers
+PROVIDER_RETRY_ATTEMPTS=2          # Tentativas extras por provider antes de fallback (padrão: 2)
+PROVIDER_RETRY_DELAY_MS=200        # Delay base do backoff exponencial em ms (padrão: 200)
+CIRCUIT_BREAKER_THRESHOLD=3        # Falhas consecutivas para abrir o circuito (padrão: 3)
+CIRCUIT_BREAKER_COOLDOWN_MS=30000  # Tempo de cooldown do circuito em ms (padrão: 30000)
+
+# Débitos Veiculares — simulação de falha (desenvolvimento/testes)
+SIMULATE_PROVIDER_A_FAILURE=false  # true → Provider A sempre lança exceção
+SIMULATE_PROVIDER_B_FAILURE=false  # true → Provider B sempre lança exceção
 ```
 
 ---
@@ -417,7 +543,7 @@ Após gerar, importe o módulo em `app.module.ts` e adicione a entidade ao `data
 
 ## Testes
 
-Os testes unitários usam **Jest** com **SWC** como transpilador.
+Os testes usam **Jest** com **SWC** como transpilador (76 testes, 9 suites).
 
 ```bash
 # Rodar todos os testes
@@ -427,10 +553,20 @@ pnpm test
 pnpm test:cov
 
 # Arquivo específico
-pnpm test -- user.service
+pnpm test -- vehicle-debts
 ```
 
 Factories de teste ficam em `src/testing/factories/` (ex: `make-user.ts` usando `@faker-js/faker`).
+
+### Cobertura do módulo VehicleDebts
+
+| Suite | O que cobre |
+|-------|-------------|
+| `interest.calculator.spec.ts` | `roundHalfUp`, IPVA (cap e sem cap), MULTA, não vencido, tipo desconhecido, lista vazia |
+| `vehicle-debts.service.spec.ts` | Golden path completo (valores do spec), placa não encontrada, zero débitos, tipo desconhecido (422) |
+| `vehicle-debts.service.spec.ts` (fallback) | Fallback para segundo provider, 503 quando todos falham, null sem tentar próximo |
+| `vehicle-debts.service.spec.ts` (retry) | 3 chamadas ao provider em falha (1 + 2 retries), sucesso na segunda tentativa |
+| `vehicle-debts.service.spec.ts` (circuit breaker) | Circuito abre após threshold e pula provider; reset após cooldown (HALF-OPEN) |
 
 ---
 

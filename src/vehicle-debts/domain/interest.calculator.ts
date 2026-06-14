@@ -24,9 +24,21 @@ function diffDays(dueDateStr: string, refDate: Date): number {
   return Math.floor((refDate.getTime() - due.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function getEnvRate(key: string, fallback: number): number {
+  const val = parseFloat(process.env[key] ?? '');
+  return isNaN(val) ? fallback : val;
+}
+
 const INTEREST_RULES: Record<string, (amount: number, days: number) => number> = {
-  IPVA: (amount, days) => Math.min(amount * 0.0033 * days, amount * 0.20),
-  MULTA: (amount, days) => amount * 0.01 * days,
+  IPVA: (amount, days) => {
+    const rate = getEnvRate('IPVA_DAILY_RATE', 0.0033);
+    const cap = getEnvRate('IPVA_MAX_RATE', 0.20);
+    return Math.min(amount * rate * days, amount * cap);
+  },
+  MULTA: (amount, days) => {
+    const rate = getEnvRate('MULTA_DAILY_RATE', 0.01);
+    return amount * rate * days;
+  },
 };
 
 function calcInterest(amount: number, daysLate: number, type: string): number {

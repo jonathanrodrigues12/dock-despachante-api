@@ -99,6 +99,13 @@ describe('VehicleDebtsService', () => {
 });
 
 describe('ProviderChainService — fallback', () => {
+  beforeEach(() => {
+    process.env.PROVIDER_RETRY_ATTEMPTS = '0';
+    process.env.PROVIDER_RETRY_DELAY_MS = '0';
+    process.env.CIRCUIT_BREAKER_THRESHOLD = '3';
+    process.env.CIRCUIT_BREAKER_COOLDOWN_MS = '30000';
+  });
+
   it('falls back to second provider when first throws', async () => {
     const p1 = { getDebts: jest.fn().mockRejectedValue(new Error('timeout')) };
     const p2 = {
@@ -125,5 +132,90 @@ describe('ProviderChainService — fallback', () => {
     const result = await chain.getDebts('ABC1234');
     expect(result).toBeNull();
     expect(p2.getDebts).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProviderChainService — retry with backoff', () => {
+  beforeEach(() => {
+    process.env.PROVIDER_RETRY_ATTEMPTS = '2';
+    process.env.PROVIDER_RETRY_DELAY_MS = '0';
+    process.env.CIRCUIT_BREAKER_THRESHOLD = '99';
+    process.env.CIRCUIT_BREAKER_COOLDOWN_MS = '30000';
+  });
+
+  it('retries a failing provider before falling back', async () => {
+    const p1 = { getDebts: jest.fn().mockRejectedValue(new Error('flaky')) };
+    const p2 = { getDebts: jest.fn().mockResolvedValue({ plate: 'ABC1234', debts: [] }) };
+    const chain = makeChain([p1, p2]);
+
+    await chain.getDebts('ABC1234');
+
+    // 1 initial attempt + 2 retries = 3 total calls to p1
+    expect(p1.getDebts).toHaveBeenCalledTimes(3);
+    expect(p2.getDebts).toHaveBeenCalledTimes(1);
+  });
+
+  it('succeeds on second attempt without hitting fallback', async () => {
+    const p1 = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('flaky'))
+      .mockResolvedValue({ plate: 'ABC1234', debts: [] });
+    const provider = { getDebts: p1 };
+    const chain = makeChain([provider]);
+
+    const result = await chain.getDebts('ABC1234');
+
+    expect(result).not.toBeNull();
+    expect(p1).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ProviderChainService — circuit breaker', () => {
+  beforeEach(() => {
+    process.env.PROVIDER_RETRY_ATTEMPTS = '0';
+    process.env.PROVIDER_RETRY_DELAY_MS = '0';
+    process.env.CIRCUIT_BREAKER_THRESHOLD = '3';
+    process.env.CIRCUIT_BREAKER_COOLDOWN_MS = '30000';
+  });
+
+  it('opens circuit after threshold failures and skips provider', async () => {
+    const p1 = { getDebts: jest.fn().mockRejectedValue(new Error('down')) };
+    const p2 = { getDebts: jest.fn().mockResolvedValue({ plate: 'ABC1234', debts: [] }) };
+    const chain = makeChain([p1, p2]);
+
+    // exhaust threshold (3 failures open the circuit)
+    for (let i = 0; i < 3; i++) {
+      await chain.getDebts('ABC1234').catch(() => {});
+    }
+
+    p1.getDebts.mockClear();
+    p2.getDebts.mockClear();
+
+    // circuit is now OPEN — p1 must be skipped entirely
+    await chain.getDebts('ABC1234');
+
+    expect(p1.getDebts).not.toHaveBeenCalled();
+    expect(p2.getDebts).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets circuit after cooldown and retries provider', async () => {
+    process.env.CIRCUIT_BREAKER_COOLDOWN_MS = '0';
+
+    const p1 = { getDebts: jest.fn().mockRejectedValue(new Error('down')) };
+    const chain = makeChain([p1]);
+
+    // open the circuit
+    for (let i = 0; i < 3; i++) {
+      await chain.getDebts('ABC1234').catch(() => {});
+    }
+
+    p1.getDebts.mockResolvedValue({ plate: 'ABC1234', debts: [] });
+    p1.getDebts.mockClear();
+
+    // cooldown=0 means circuit should be HALF-OPEN immediately
+    const result = await chain.getDebts('ABC1234');
+
+    expect(result).not.toBeNull();
+    expect(p1.getDebts).toHaveBeenCalledTimes(1);
   });
 });
