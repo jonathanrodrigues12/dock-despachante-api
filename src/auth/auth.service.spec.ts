@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { MailerService } from '@nestjs-modules/mailer';
 import { UserService } from '../users/user.service';
 import { CodeValidationService } from '../code-validations/code-validation.service';
-import { HttpException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, HttpException, NotFoundException } from '@nestjs/common';
 import { Role } from '../common/entity/rolebase';
 import { AuthProvider } from '../common/enums/provider.enum';
 import { MfaService } from './mfa/mfa.service';
@@ -89,6 +89,13 @@ describe('AuthService', () => {
     jest.spyOn(bcrypt, 'compare').mockImplementationOnce(() => Promise.resolve(false));
     await expect(service.login({ email: mockUser.email, password: 'wrong' })).rejects.toThrow(
       HttpException,
+    );
+  });
+
+  it('should throw ForbiddenException if user is inactive', async () => {
+    userService.findByEmail.mockResolvedValue({ ...mockUser, isActive: false });
+    await expect(service.login({ email: mockUser.email, password: '' })).rejects.toThrow(
+      ForbiddenException,
     );
   });
 

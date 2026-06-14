@@ -49,6 +49,10 @@ export class AuthService {
       throw new ForbiddenException(UserErrorMessage.INVALID_CREDENTIALS);
     }
 
+    if (!user.isActive) {
+      throw new ForbiddenException(UserErrorMessage.NOT_ACTIVE);
+    }
+
     if (user.mfaEnabled) {
       const payloadmfa = {
         userId: user.id,

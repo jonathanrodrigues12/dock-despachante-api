@@ -31,9 +31,20 @@ const mockAuthService = {
   sendPasswordRecoveryEmail: jest.fn(),
 };
 
+const FIXED_NOW = new Date('2024-05-10T00:00:00Z');
+
 describe('CodeValidationService', () => {
   let service: CodeValidationService;
   let repo: any;
+
+  beforeAll(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(FIXED_NOW);
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
 
   beforeEach(async () => {
     repo = {
@@ -60,17 +71,16 @@ describe('CodeValidationService', () => {
   });
 
   it('should validate code and return code validation', async () => {
-    const now = new Date();
     repo.findByCode.mockResolvedValue({
       user: mockUser,
-      expiresIn: new Date(now.getTime() + 10000),
+      expiresIn: new Date(FIXED_NOW.getTime() + 10_000),
     });
     repo.deleted.mockResolvedValue(undefined);
     const result = await service.validate(mockCode);
     expect(result).toBeDefined();
     expect(result.user).toEqual(mockUser);
     expect(result.expiresIn).toBeInstanceOf(Date);
-    expect(result.expiresIn.getTime()).toBeGreaterThan(now.getTime());
+    expect(result.expiresIn.getTime()).toBeGreaterThan(FIXED_NOW.getTime());
   });
 
   it('should throw BadRequestException if code is invalid', async () => {
@@ -83,7 +93,7 @@ describe('CodeValidationService', () => {
   it('should throw BadRequestException and call updateAndResendCode if code is expired', async () => {
     const expiredValidation = {
       user: mockUser,
-      expiresIn: new Date(Date.now() - 10000),
+      expiresIn: new Date(FIXED_NOW.getTime() - 10_000),
       id: 'some-id',
     };
 
