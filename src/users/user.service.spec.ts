@@ -3,7 +3,6 @@ import { UserService } from './user.service';
 import { UserRepository } from './repositories/user.repository';
 import { MailerService } from '@nestjs-modules/mailer';
 import { CodeValidationService } from '../code-validations/code-validation.service';
-import { ImageProcessingService } from '../storage/services/image-processing.service';
 import { HttpException } from '@nestjs/common';
 import { AuthProvider } from '../common/enums/provider.enum';
 import { Role } from '../common/entity/rolebase';
@@ -25,8 +24,6 @@ describe('UserService', () => {
   let repo: any;
   let mailer: any;
   let codeValidation: any;
-  let storageService: any;
-  let imageProcessingService: any;
 
   beforeEach(async () => {
     repo = {
@@ -41,16 +38,12 @@ describe('UserService', () => {
     mailer = { sendMail: jest.fn() };
     codeValidation = { create: jest.fn(), validate: jest.fn(), deleted: jest.fn() };
     codeValidation.validate.mockResolvedValue({ user: mockUser });
-    storageService = { deleteFile: jest.fn(), uploadFile: jest.fn() };
-    imageProcessingService = { processAndUpload: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
         { provide: UserRepository, useValue: repo },
         { provide: MailerService, useValue: mailer },
         { provide: CodeValidationService, useValue: codeValidation },
-        { provide: 'STORAGE_SERVICE', useValue: storageService },
-        { provide: ImageProcessingService, useValue: imageProcessingService },
       ],
     }).compile();
     service = module.get<UserService>(UserService);

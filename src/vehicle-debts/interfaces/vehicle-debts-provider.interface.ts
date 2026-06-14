@@ -9,6 +9,7 @@ export interface RawDebtRecord {
 export interface ProviderResult {
   plate: string;
   debts: RawDebtRecord[];
+  provider: 'A' | 'B';
 }
 
 export interface IVehicleDebtsProvider {

@@ -30,7 +30,7 @@ async function bootstrap() {
     ['/api/docs', '/api/docs-json'],
     basicAuth({
       challenge: true,
-      users: { admin: 'Going2!@Swagger2026' },
+      users: { admin: 'DockDespachante!@Swagger2026' },
     }),
   );
 

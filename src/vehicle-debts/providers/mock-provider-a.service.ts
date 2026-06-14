@@ -22,6 +22,7 @@ export class MockProviderAService implements IVehicleDebtsProvider {
 
     return {
       plate: record.vehicle,
+      provider: 'A',
       debts: record.debts.map((d) => ({
         type: d.type,
         amount: d.amount,

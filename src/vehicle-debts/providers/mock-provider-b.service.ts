@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { XMLParser } from 'fast-xml-parser';
@@ -28,6 +28,10 @@ export class MockProviderBService implements IVehicleDebtsProvider {
   }
 
   async getDebts(plate: string): Promise<ProviderResult | null> {
+    if (process.env.SIMULATE_PROVIDER_B_FAILURE === 'true') {
+      throw new ServiceUnavailableException('Provider B simulated failure');
+    }
+
     const record = this.records.find(
       (r) => String(r.plate).toUpperCase() === plate.toUpperCase(),
     );
@@ -46,6 +50,7 @@ export class MockProviderBService implements IVehicleDebtsProvider {
 
     return {
       plate: String(record.plate),
+      provider: 'B',
       debts: rawDebts.map((d) => ({
         type: d.category,
         amount: Number(d.value),

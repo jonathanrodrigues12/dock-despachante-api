@@ -38,7 +38,6 @@ describe('UserController', () => {
     codeValidations: [],
     created_at: new Date(),
     updated_at: new Date(),
-    photo_url: undefined,
   };
 
   const currentUser: IJwtPayload = {

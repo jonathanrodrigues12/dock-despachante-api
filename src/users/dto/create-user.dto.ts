@@ -12,14 +12,6 @@ export class CreateUserDto {
   @IsNotEmpty({ message: 'Surname is required' })
   surname: string;
 
-  @ApiProperty({ required: false, type: 'string', format: 'binary' })
-  @IsOptional()
-  photo?: any;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  photo_url?: string;
-
   @ApiProperty()
   @IsEmail({ allow_display_name: false }, { message: 'Email valid required' })
   @IsNotEmpty({ message: 'Email is required' })

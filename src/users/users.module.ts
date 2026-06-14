@@ -8,7 +8,6 @@ import { UserRepository } from './repositories/user.repository';
 import { CodeValidationModule } from '../code-validations/code-validation.module';
 import { CaslModule } from '../casl/casl.module';
 import { AuthModule } from '@/auth/auth.module';
-import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
@@ -17,7 +16,6 @@ import { StorageModule } from '../storage/storage.module';
     TypeOrmModule.forFeature([User]),
     forwardRef(() => CodeValidationModule),
     forwardRef(() => AuthModule),
-    StorageModule,
   ],
   controllers: [UserController],
   providers: [UserRepository, UserService],

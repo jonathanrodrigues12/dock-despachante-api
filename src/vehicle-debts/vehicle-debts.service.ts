@@ -30,6 +30,7 @@ export class VehicleDebtsService {
 
     return {
       placa: result.plate,
+      provedor: result.provider,
       debitos,
       resumo: {
         total_original: roundHalfUp(totalOriginal, 2).toFixed(2),

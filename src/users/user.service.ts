@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -14,8 +13,6 @@ import { MailerService } from '@nestjs-modules/mailer';
 import { AuthProvider } from '../common/enums/provider.enum';
 import { UserErrorMessage } from '../common/error-message-base';
 import { ParamsPagination } from '@/common/paginations/params-pagination';
-import { ImageProcessingService } from '../storage/services/image-processing.service';
-import { IStorageService } from '../storage/interfaces/storage.interface';
 
 @Injectable()
 export class UserService {
@@ -24,31 +21,13 @@ export class UserService {
     private readonly repo: UserRepository,
     private mailer: MailerService,
     private codeValidationService: CodeValidationService,
-    @Inject('STORAGE_SERVICE') private readonly storageService: IStorageService,
-    private readonly imageProcessingService: ImageProcessingService,
   ) {}
 
-  async create(
-    createUserDto: CreateUserDto,
-    requestBy?: string,
-    photo?: Express.Multer.File,
-  ): Promise<User> {
+  async create(createUserDto: CreateUserDto, requestBy?: string): Promise<User> {
     const { email } = createUserDto;
     const existingUser = await this.repo.checkIfExistsEmail(email);
     if (existingUser) {
       throw new ConflictException(UserErrorMessage.EMAIL_ALREADY_IN_USE);
-    }
-
-    let photoUrl: string | undefined = createUserDto.photo_url;
-
-    // Processa a imagem se fornecida
-    if (photo) {
-      const uploadResult = await this.imageProcessingService.processAndUpload(
-        photo,
-        this.storageService,
-        'users',
-      );
-      photoUrl = uploadResult.url;
     }
 
     const password = Math.random().toString(36).slice(-8);
@@ -56,10 +35,9 @@ export class UserService {
     const user = await this.repo.save(
       {
         ...createUserDto,
-        photo_url: photoUrl,
         provider: createUserDto.provider ? createUserDto.provider : AuthProvider.LOCAL,
         password: hashedPassword,
-        isActive: createUserDto.provider ? true : false, // Ativa se provider existir
+        isActive: createUserDto.provider ? true : false,
       },
       requestBy,
     );
@@ -94,33 +72,8 @@ export class UserService {
     return true;
   }
 
-  async update(
-    id: string,
-    userData: Partial<User>,
-    requestBy?: string,
-    photo?: Express.Multer.File,
-  ): Promise<User> {
+  async update(id: string, userData: Partial<User>, requestBy?: string): Promise<User> {
     const user = await this.findOne(id);
-
-    // Processa a nova imagem se fornecida
-    if (photo) {
-      // Remove a imagem antiga se existir
-      if (user.photo_url) {
-        try {
-          await this.storageService.deleteFile(user.photo_url);
-        } catch (error) {
-          console.error('Error deleting old photo:', error);
-        }
-      }
-
-      const uploadResult = await this.imageProcessingService.processAndUpload(
-        photo,
-        this.storageService,
-        'users',
-      );
-      userData.photo_url = uploadResult.url;
-    }
-
     Object.assign(user, userData);
     const userUpdated = await this.repo.update(id, user, requestBy);
 

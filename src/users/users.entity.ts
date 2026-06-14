@@ -28,12 +28,6 @@ export class User {
   @Column({ length: 255 })
   surname: string;
 
-  @ApiProperty({
-    required: false,
-  })
-  @Column({ nullable: true })
-  photo_url?: string;
-
   @ApiProperty()
   @Column({ length: 255, unique: true })
   email: string;

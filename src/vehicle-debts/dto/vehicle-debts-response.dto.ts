@@ -39,6 +39,7 @@ export class PagamentosDto {
 
 export class VehicleDebtsResponseDto {
   @ApiProperty({ example: 'ABC1234' }) placa: string;
+  @ApiProperty({ example: 'A', enum: ['A', 'B'] }) provedor: 'A' | 'B';
   @ApiProperty({ type: [EnrichedDebtDto] }) debitos: EnrichedDebtDto[];
   @ApiProperty({ type: ResumoDto }) resumo: ResumoDto;
   @ApiProperty({ type: PagamentosDto }) pagamentos: PagamentosDto;
