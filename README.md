@@ -66,11 +66,9 @@ Todas as entidades de domínio estendem `EntityBase`, que provê:
 
 ### Roles
 
-| Role        | Permissões                          |
-|-------------|-------------------------------------|
-| `SUPERADMIN`| Acesso total                        |
-| `ADMIN`     | Acesso total                        |
-| `CUSTOMER`  | Somente leitura em `User`           |
+| Role    | Permissões  |
+|---------|-------------|
+| `ADMIN` | Acesso total (`LIST`, `READ`, `CREATE`, `UPDATE`, `DELETE`) |
 
 ---
 
@@ -346,7 +344,7 @@ Permissões são definidas em `casl-ability.factory.ts` com base no `role` do us
 - Guard: `PoliciesGuard`
 - Decorator: `@CheckPolicies((ability) => ability.can(Action.CREATE, User))`
 
-Ações disponíveis: `CREATE`, `READ`, `UPDATE`, `DELETE`, `MANAGE`.
+Ações disponíveis: `CREATE`, `READ`, `LIST`, `UPDATE`, `DELETE`, `MANAGE`.
 
 ---
 
