@@ -95,7 +95,7 @@ describe('VehicleDebtsService', () => {
       {
         getDebts: jest.fn().mockResolvedValue({
           plate: 'XYZ9876',
-          debts: [{ type: 'LICENCIAMENTO', amount: 180, due_date: '2024-01-01' }],
+          debts: [{ type: 'SEGURO_OBRIGATORIO', amount: 180, due_date: '2024-01-01' }],
         }),
       },
     ]);

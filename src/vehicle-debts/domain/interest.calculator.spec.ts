@@ -47,6 +47,28 @@ describe('enrichDebts — MULTA', () => {
   });
 });
 
+describe('enrichDebts — LICENCIAMENTO', () => {
+  it('applies 0.33%/day capped at 20% (same rule as IPVA)', () => {
+    // 20 days late: 180 * 0.0033 * 20 = 11.88 < 36 cap
+    const [debt] = enrichDebts(
+      [{ type: 'LICENCIAMENTO', amount: 180.0, due_date: '2024-04-20' }],
+      REF_DATE,
+    );
+    expect(debt.dias_atraso).toBe(20);
+    expect(debt.valor_original).toBe('180.00');
+    expect(debt.valor_atualizado).toBe('191.88');
+  });
+
+  it('caps at 20% when interest exceeds limit', () => {
+    // 200 days late: 180 * 0.0033 * 200 = 118.80 > 36 cap → capped at 36
+    const [debt] = enrichDebts(
+      [{ type: 'LICENCIAMENTO', amount: 180.0, due_date: '2023-10-23' }],
+      REF_DATE,
+    );
+    expect(debt.valor_atualizado).toBe('216.00');
+  });
+});
+
 describe('enrichDebts — edge cases', () => {
   it('non-overdue debt: dias_atraso=0, valor_atualizado=valor_original', () => {
     const [debt] = enrichDebts(
@@ -68,7 +90,7 @@ describe('enrichDebts — edge cases', () => {
 
   it('throws 422 for unknown debt type', () => {
     expect(() =>
-      enrichDebts([{ type: 'LICENCIAMENTO', amount: 100, due_date: '2024-01-01' }], REF_DATE),
+      enrichDebts([{ type: 'SEGURO_OBRIGATORIO', amount: 100, due_date: '2024-01-01' }], REF_DATE),
     ).toThrow(UnprocessableEntityException);
   });
 

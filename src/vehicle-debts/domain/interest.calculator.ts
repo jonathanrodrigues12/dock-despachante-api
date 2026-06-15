@@ -35,6 +35,11 @@ const INTEREST_RULES: Record<string, (amount: number, days: number) => number> =
     const cap = getEnvRate('IPVA_MAX_RATE', 0.20);
     return Math.min(amount * rate * days, amount * cap);
   },
+  LICENCIAMENTO: (amount, days) => {
+    const rate = getEnvRate('IPVA_DAILY_RATE', 0.0033);
+    const cap = getEnvRate('IPVA_MAX_RATE', 0.20);
+    return Math.min(amount * rate * days, amount * cap);
+  },
   MULTA: (amount, days) => {
     const rate = getEnvRate('MULTA_DAILY_RATE', 0.01);
     return amount * rate * days;
