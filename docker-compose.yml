@@ -8,19 +8,24 @@ services:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $POSTGRES_USER -d $POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # api:
-  #   build: .
-  #   container_name: api_backend
-  #   env_file:
-  #     - .env
-  #   depends_on:
-  #     - api_backend_db
-  #   ports:
-  #     - '3000:3000'
-
-  #   command: >
-  #     sh -c "sleep 5 && npx typeorm migration:run -d dist/data-source.js && node dist/main"
+  api:
+    build: .
+    container_name: api_backend
+    env_file:
+      - .env
+    depends_on:
+      db_dock:
+        condition: service_healthy
+    ports:
+      - '3333:3333'
+    command: >
+      sh -c "node dist/database/run-seeders && node dist/main"
 
 volumes:
   pgdata:

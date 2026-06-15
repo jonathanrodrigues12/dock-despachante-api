@@ -8,6 +8,8 @@ RUN npm install
 
 COPY . .
 
+RUN npm run test
+
 RUN npm run build
 
 FROM node:20-alpine
@@ -20,6 +22,6 @@ COPY package*.json ./
 
 RUN npm install --only=production
 
-EXPOSE 3000
+EXPOSE 3333
 
-CMD ["node", "dist/main","sh", "-c", "npx typeorm migration:run -d dist/data-source.js && node dist/main"]
+CMD ["node", "dist/main"]

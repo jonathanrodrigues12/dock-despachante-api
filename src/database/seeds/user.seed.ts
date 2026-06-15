@@ -4,39 +4,42 @@ import { Seeder, SeederFactoryManager } from 'typeorm-extension';
 import * as bcrypt from 'bcrypt';
 import { Role } from '@/common/entity/rolebase';
 import { User } from '@/users/users.entity';
-import { makeUser } from '@/testing/factories/make-user';
 
+const SEED_USERS = [
+  {
+    name: 'Admin',
+    surname: 'System',
+    email: 'admin@example.com',
+    password: 'Password123!',
+    role: Role.ADMIN,
+  },
+];
 
 export class UserSeeder implements Seeder {
   async run(dataSource: DataSource, _factoryManager: SeederFactoryManager): Promise<void> {
     const userRepository = dataSource.getRepository(User);
-    await this.access(userRepository);
+    await this.seed(userRepository);
   }
 
-  async access(userRepository: Repository<User>): Promise<void> {
-    const users = [
-      {
-        email: 'admin@example.com',
-        password: 'Password123!',
-        role: Role.ADMIN,
-      },
-    ];
-
+  async seed(userRepository: Repository<User>): Promise<void> {
     const newUsers: User[] = [];
-    for (const user of [...users]) {
-      const existingUser = await userRepository.findOneBy({
-        email: user.email,
+
+    for (const data of SEED_USERS) {
+      const exists = await userRepository.findOneBy({ email: data.email });
+      if (exists) continue;
+
+      const user = new User();
+      Object.assign(user, {
+        name: data.name,
+        surname: data.surname,
+        email: data.email,
+        password: await bcrypt.hash(data.password, 10),
+        role: data.role,
+        isActive: true,
+        provider: 'local',
       });
 
-      if (!existingUser) {
-        newUsers.push(
-          makeUser({
-            email: user.email,
-            password: await bcrypt.hash(user.password, 10),
-            role: user.role,
-          }),
-        );
-      }
+      newUsers.push(user);
     }
 
     await userRepository.save(newUsers);

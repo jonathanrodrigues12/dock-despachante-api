@@ -20,7 +20,6 @@ const mockUser: User = {
   codeValidations: [],
   created_at: new Date(),
   updated_at: new Date(),
-  photo_url: undefined,
 };
 
 const mockCode = '123456';

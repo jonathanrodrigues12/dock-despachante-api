@@ -1,8 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ServiceUnavailableException, UnprocessableEntityException } from '@nestjs/common';
+import { Logger, NotFoundException, ServiceUnavailableException, UnprocessableEntityException } from '@nestjs/common';
 import { VehicleDebtsService } from './vehicle-debts.service';
 import { ProviderChainService } from './providers/provider-chain.service';
 import { VEHICLE_DEBTS_PROVIDERS } from './interfaces/vehicle-debts-provider.interface';
+
+beforeAll(() => {
+  jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+  jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+  jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+});
 
 const REF_DATE = new Date('2024-05-10T00:00:00Z');
 
