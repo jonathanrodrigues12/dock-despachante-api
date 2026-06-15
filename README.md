@@ -406,13 +406,54 @@ SIMULATE_PROVIDER_B_FAILURE=false  # true → Provider B sempre lança exceção
 
 ## Instalação e Execução
 
-### Pré-requisitos
+### Via Docker Compose (recomendado)
 
-- Node.js 20+
-- pnpm 9+
-- PostgreSQL 15+
+**Pré-requisitos:** Docker e Docker Compose instalados.
 
-### Passos
+```bash
+# 1. Clonar o repositório
+git clone <repo-url>
+cd api
+
+# 2. Configurar variáveis de ambiente
+cp .env.example .env
+# Edite o .env — atenção ao POSTGRES_HOST que deve ser o nome do serviço:
+# POSTGRES_HOST=db_dock
+```
+
+> **Importante:** ao rodar com Docker Compose o `POSTGRES_HOST` deve ser `db_dock` (nome do serviço), não `localhost`.
+
+```bash
+# 3. Subir tudo (banco + seeders + API)
+docker compose up --build
+```
+
+O Docker irá:
+1. Executar os testes unitários durante o build — se algum falhar, o processo para.
+2. Aguardar o banco estar saudável (`healthcheck`) antes de subir a API.
+3. Rodar os seeders (cria usuário admin inicial).
+4. Iniciar a API.
+
+| Recurso | URL |
+|---------|-----|
+| API | `http://localhost:3333` |
+| Swagger | `http://localhost:3333/api/docs` |
+
+**Credenciais do Swagger:** usuário `admin` · senha `DockDespachante!@Swagger2026`
+
+```bash
+# Parar os containers
+docker compose down
+
+# Parar e remover o volume do banco (reset completo)
+docker compose down -v
+```
+
+---
+
+### Local (sem Docker)
+
+**Pré-requisitos:** Node.js 20+, pnpm 9+, PostgreSQL 15+.
 
 ```bash
 # 1. Clonar o repositório
@@ -424,15 +465,12 @@ pnpm install
 
 # 3. Configurar variáveis de ambiente
 cp .env.example .env
-# edite o .env com suas credenciais
+# Edite o .env com suas credenciais (POSTGRES_HOST=localhost)
 
-# 4. Subir o banco (se usar Docker)
-docker run --name dock-pg -e POSTGRES_PASSWORD=sua_senha -p 5432:5432 -d postgres:15
-
-# 5. Rodar os seeders (cria usuário admin inicial)
+# 4. Rodar os seeders (cria usuário admin inicial)
 pnpm seed
 
-# 6. Iniciar em modo desenvolvimento
+# 5. Iniciar em modo desenvolvimento
 pnpm start:dev
 ```
 
