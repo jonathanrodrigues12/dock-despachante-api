@@ -532,7 +532,7 @@ Após gerar, importe o módulo em `app.module.ts` e adicione a entidade ao `data
 
 ## Testes
 
-Os testes usam **Jest** com **SWC** como transpilador.
+Os testes usam **Jest** com **SWC** como transpilador. A suite atual conta com **21 suites** e **141 testes**, todos passando.
 
 ```bash
 # Rodar todos os testes
@@ -547,15 +547,65 @@ pnpm test -- vehicle-debts
 
 Factories de teste ficam em `src/testing/factories/` (ex: `make-user.ts` usando `@faker-js/faker`).
 
-### Cobertura do módulo VehicleDebts
+### Cobertura por módulo
+
+#### Domínio — Vehicle Debts
 
 | Suite | O que cobre |
 |-------|-------------|
-| `interest.calculator.spec.ts` | `roundHalfUp`, IPVA (cap e sem cap), MULTA, não vencido, tipo desconhecido, lista vazia |
+| `interest.calculator.spec.ts` | `roundHalfUp`, IPVA (cap e sem cap), MULTA, não vencido, vence hoje, tipo desconhecido, lista vazia |
+| `payment.calculator.spec.ts` | Lista vazia, golden path TOTAL/IPVA/MULTA, tipo único, mesmo tipo duplicado, estrutura de parcelas [1x/6x/12x] |
 | `vehicle-debts.service.spec.ts` | Golden path completo (valores do spec), placa não encontrada, zero débitos, tipo desconhecido (422) |
 | `vehicle-debts.service.spec.ts` (fallback) | Fallback para segundo provider, 503 quando todos falham, null sem tentar próximo |
 | `vehicle-debts.service.spec.ts` (retry) | 3 chamadas ao provider em falha (1 + 2 retries), sucesso na segunda tentativa |
 | `vehicle-debts.service.spec.ts` (circuit breaker) | Circuito abre após threshold e pula provider; reset após cooldown (HALF-OPEN) |
+
+#### Providers
+
+| Suite | O que cobre |
+|-------|-------------|
+| `mock-provider-a.service.spec.ts` | Parse JSON, case-insensitive, placa desconhecida, sem débitos, falha simulada via env |
+| `mock-provider-b.service.spec.ts` | Parse XML, case-insensitive, placa desconhecida, sem débitos, falha simulada via env |
+
+#### Controllers
+
+| Suite | O que cobre |
+|-------|-------------|
+| `vehicle-debts.controller.spec.ts` | Placa válida (formato antigo e Mercosul), placa inválida (3 variações + sem chamar service), propagação de 404/503 |
+| `auth.controller.spec.ts` | `POST /login` (ok/404/403), `POST /send-code-recovery-password` (ok/404), `POST /validate-code` (ok/403), `PATCH /recover-password` (ok/404) |
+| `user.controller.spec.ts` | CRUD completo de usuários |
+
+#### Guards e Estratégia JWT
+
+| Suite | O que cobre |
+|-------|-------------|
+| `jwt.guard.spec.ts` | Rota pública → passa sem token; rota privada → delega ao `AuthGuard('jwt')` |
+| `super-admin.guard.spec.ts` | Sem decorator → passa; ADMIN → passa; USER → 403; sem usuário → 403; null → 403 |
+| `jwt.strategy.spec.ts` | Payload válido; userId não-UUID → erro; role inválida → erro; userId ausente → erro |
+
+#### Autorização CASL
+
+| Suite | O que cobre |
+|-------|-------------|
+| `casl-ability.factory.spec.ts` | ADMIN pode LIST/READ/CREATE/UPDATE/DELETE em `"all"` |
+| `policies.guard.spec.ts` | Sem handlers → true; handler função true/false; handler objeto; AND lógico (todos devem passar) |
+
+#### Serviços de domínio
+
+| Suite | O que cobre |
+|-------|-------------|
+| `auth.service.spec.ts` | Login, recuperação de senha, validação de código |
+| `user.service.spec.ts` | CRUD de usuários, checagem de e-mail |
+| `code-validation.service.spec.ts` | Criação, validação e expiração de códigos |
+
+#### Infraestrutura e utilitários
+
+| Suite | O que cobre |
+|-------|-------------|
+| `response-interceptor.spec.ts` | Envolve resposta em `{ success, data, errors }`, mensagem GET vs POST, null/undefined → null, timestamp ISO 8601 |
+| `util.spec.ts` | Código sempre string de 6 dígitos, apenas numérico, intervalo [100000–999999], distribuição aleatória |
+| `jwt.utils.spec.ts` | Token válido → `userId`; sem header; sem `Bearer`; assinatura errada; token expirado; `userId` ausente |
+| `user.seed.spec.ts` | Seeder cria usuário admin inicial |
 
 ---
 
