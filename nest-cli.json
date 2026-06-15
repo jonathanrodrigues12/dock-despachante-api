@@ -6,7 +6,8 @@
     "deleteOutDir": true,
     "assets": [
       { "include": "**/*.xml", "watchAssets": true },
-      { "include": "**/*.json", "watchAssets": true }
+      { "include": "**/*.json", "watchAssets": true },
+      { "include": "**/*.csv", "watchAssets": true }
     ]
   }
 }

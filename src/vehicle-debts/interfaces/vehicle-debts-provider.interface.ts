@@ -9,7 +9,7 @@ export interface RawDebtRecord {
 export interface ProviderResult {
   plate: string;
   debts: RawDebtRecord[];
-  provider: 'A' | 'B';
+  provider: 'A' | 'B' | 'C';
 }
 
 export interface IVehicleDebtsProvider {
