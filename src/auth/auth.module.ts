@@ -28,7 +28,7 @@ import { CustomMailerModule } from '@/mailer/mailer.module';
       useFactory: (env: EnvService) => ({
         global: true,
         secret: env.get('JWT_SECRET'),
-        signOptions: { expiresIn: env.get('JWT_EXPIRES_IN') },
+        signOptions: { expiresIn: env.get('JWT_EXPIRES_IN') as any },
       }),
     }),
   ],
