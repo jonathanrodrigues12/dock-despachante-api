@@ -12,7 +12,6 @@ API backend da plataforma **Dock Despachante**, sistema para gestão de serviço
 - [Variáveis de Ambiente](#variáveis-de-ambiente)
 - [Instalação e Execução](#instalação-e-execução)
 - [Scripts](#scripts)
-- [Storage](#storage)
 - [Gerador de Entidades](#gerador-de-entidades)
 - [Testes](#testes)
 - [Padrão de Commits](#padrão-de-commits)
@@ -29,12 +28,9 @@ API backend da plataforma **Dock Despachante**, sistema para gestão de serviço
 | TypeORM 0.3          | ORM                                       |
 | PostgreSQL           | Banco de dados (`dockDespachante`)        |
 | JWT + Passport       | Autenticação stateless                    |
-| Google OAuth2 (OIDC) | Login social                              |
-| speakeasy / qrcode   | MFA via TOTP                              |
 | CASL                 | Autorização baseada em roles/políticas    |
 | Nodemailer           | Envio de e-mails via SMTP (Titan Mail)    |
 | Handlebars           | Templates de e-mail (`/templates`)        |
-| AWS S3 / GCP         | Storage em nuvem (selecionável via env)   |
 | fast-xml-parser      | Parsing de XML (débitos veiculares)       |
 | Swagger / OpenAPI    | Documentação interativa da API            |
 | pnpm                 | Gerenciador de pacotes                    |
@@ -49,13 +45,12 @@ O projeto segue a estrutura modular do NestJS. Cada domínio é um módulo indep
 
 ```
 src/
-  auth/               # Login, recuperação de senha, Google SSO, MFA
+  auth/               # Login e recuperação de senha
   users/              # CRUD de usuários
   vehicle-debts/      # Consulta de débitos veiculares com juros e opções de pagamento
   code-validations/   # Códigos de validação por e-mail
   casl/               # Políticas de permissão (RBAC)
   jwt/                # Guards, estratégia e decorators JWT
-  storage/            # Abstração de storage: local / S3 / GCP
   mailer/             # Configuração do módulo de e-mail
   database/           # Conexão TypeORM e seeders
   env/                # Validação de variáveis de ambiente
@@ -88,8 +83,6 @@ Responsável por todo o fluxo de autenticação:
 - Login com e-mail/senha
 - Recuperação de senha via código por e-mail
 - Validação de código de primeiro acesso
-- Login com Google via OpenID Connect
-- Inicialização, verificação e confirmação de MFA (TOTP)
 
 ### UserModule
 
@@ -168,6 +161,7 @@ vehicle-debts/
 | HTTP | Payload | Condição |
 |------|---------|----------|
 | 400 | `{ "error": "invalid_plate" }` | Placa fora do padrão antigo ou Mercosul |
+| 404 | `{ "error": "plate_not_found", "plate": "..." }` | Nenhum provider reconheceu a placa |
 | 422 | `{ "error": "unknown_debt_type", "type": "..." }` | Tipo de débito sem regra de juros |
 | 503 | `{ "error": "all_providers_unavailable" }` | Todos os providers falharam |
 
@@ -175,18 +169,67 @@ vehicle-debts/
 
 Todos os logs mascaram a placa antes de exibir: `AB***34` — nenhum dado identificável é exposto nos logs estruturados.
 
+#### Como adicionar um novo provider
+
+O sistema usa injeção por token (`VEHICLE_DEBTS_PROVIDERS`) e a **ordem do array define a prioridade** na chain. Para integrar um novo provedor externo:
+
+**1. Criar o serviço**
+
+Crie `src/vehicle-debts/providers/meu-provider.service.ts` implementando `IVehicleDebtsProvider`:
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { IVehicleDebtsProvider, ProviderResult } from '../interfaces/vehicle-debts-provider.interface';
+
+@Injectable()
+export class MeuProviderService implements IVehicleDebtsProvider {
+  async getDebts(plate: string): Promise<ProviderResult | null> {
+    // Chama a API externa, parseia e normaliza a resposta.
+    // Retorne null se a placa não for encontrada neste provider.
+    return {
+      plate,
+      provider: 'C',   // identificador único deste provider
+      debts: [
+        { type: 'IPVA', amount: 1000, due_date: '2024-01-10' },
+      ],
+    };
+  }
+}
+```
+
+> O tipo `provider` na interface (`'A' | 'B'`) deve ser expandido com o novo identificador em `vehicle-debts-provider.interface.ts`.
+
+**2. Registrar no módulo**
+
+Em `vehicle-debts.module.ts`, adicione o serviço e inclua-o na factory do token:
+
+```ts
+import { MeuProviderService } from './providers/meu-provider.service';
+
+@Module({
+  providers: [
+    VehicleDebtsService,
+    ProviderChainService,
+    MockProviderAService,
+    MockProviderBService,
+    MeuProviderService,           // registrar como provider NestJS
+    {
+      provide: VEHICLE_DEBTS_PROVIDERS,
+      useFactory: (a: MockProviderAService, b: MockProviderBService, c: MeuProviderService) => [a, b, c],
+      inject: [MockProviderAService, MockProviderBService, MeuProviderService],
+    },
+  ],
+})
+export class VehicleDebtsModule {}
+```
+
+O `ProviderChainService` itera o array na ordem dada, com retry e circuit breaker automáticos para cada elemento — nenhuma outra alteração é necessária.
+
 ### CodeValidationModule
 
 Gerencia códigos temporários enviados por e-mail para:
 - Primeiro acesso do usuário
 - Recuperação de senha
-
-### StorageModule
-
-Abstração de storage com três implementações selecionáveis via `STORAGE_TYPE`:
-- `local` — salva em disco (`./uploads`)
-- `s3` — AWS S3
-- `gcp` — Google Cloud Storage
 
 ---
 
@@ -200,11 +243,6 @@ Abstração de storage com três implementações selecionáveis via `STORAGE_TY
 | POST   | `/send-code-recovery-password` | Público | Envia código de recuperação por e-mail       |
 | POST   | `/validate-code`               | Público | Valida código de primeiro acesso/recuperação |
 | PATCH  | `/recover-password`            | Público | Redefine a senha com o código validado       |
-| GET    | `/google`                      | Público | Inicia fluxo de login com Google             |
-| GET    | `/auth/google/callback`        | Público | Callback OAuth do Google                     |
-| POST   | `/mfa/initialize`              | Bearer  | Inicializa MFA (retorna secret + QR code)    |
-| POST   | `/mfa/verifyInitialize`        | Bearer  | Confirma o código TOTP e ativa o MFA         |
-| POST   | `/mfa/confirm`                 | Público | Confirma o MFA e retorna o accessToken       |
 
 ### Users
 
@@ -228,6 +266,7 @@ Abstração de storage com três implementações selecionáveis via `STORAGE_TY
 ```json
 {
   "placa": "ABC1234",
+  "provedor": "A",
   "debitos": [
     {
       "tipo": "IPVA",
@@ -309,20 +348,6 @@ Permissões são definidas em `casl-ability.factory.ts` com base no `role` do us
 
 Ações disponíveis: `CREATE`, `READ`, `UPDATE`, `DELETE`, `MANAGE`.
 
-### MFA (TOTP)
-
-Fluxo de MFA quando habilitado para o usuário:
-
-1. `POST /login` → retorna `{ mfa_required: true, mfa_token: "..." }` em vez do accessToken
-2. Usuário digita o código do autenticador
-3. `POST /mfa/confirm` com o `mfa_token` e o `code` → retorna o accessToken final
-
-### Google OAuth / OpenID Connect
-
-1. Redirecionar o usuário para `GET /google`
-2. Após autenticação no Google, o callback `GET /auth/google/callback` processa o token
-3. Retorna o mesmo `LoginResponseDto` do login convencional
-
 ---
 
 ## Variáveis de Ambiente
@@ -359,29 +384,6 @@ EMAIL_PASSWORD=sua_senha *
 LOGO_URL=https://dominio.com/logo.png
 URL_SUPPORT=https://dominio.com/support
 COMPANY_NAME=Dock Despachante
-
-# Google OAuth (opcional)
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_CALLBACK_URL=http://localhost:3333/auth/google/callback
-
-# Storage
-STORAGE_TYPE=local                 # local | s3 | gcp (padrão: local)
-LOCAL_STORAGE_PATH=./uploads       # Padrão: ./uploads
-LOCAL_STORAGE_BASE_URL=/uploads    # Padrão: /uploads
-
-# AWS S3 (se STORAGE_TYPE=s3)
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_REGION=us-east-1               # Padrão: us-east-1
-AWS_S3_BUCKET_NAME=
-AWS_S3_BASE_URL=                   # URL base customizada (ex: CloudFront)
-
-# Google Cloud Storage (se STORAGE_TYPE=gcp)
-GCP_PROJECT_ID=
-GCP_BUCKET_NAME=
-GCP_KEY_FILENAME=                  # Caminho para arquivo credentials.json
-GCP_CREDENTIALS=                   # Ou credenciais como string JSON
 
 # Débitos Veiculares — data de referência
 REFERENCE_DATE=2024-05-10T00:00:00Z  # Data fixa para cálculo de juros (omitir para usar data atual)
@@ -458,55 +460,6 @@ A API estará disponível em `http://localhost:3333`.
 
 ---
 
-## Storage
-
-Abstração de storage com três implementações selecionáveis via `STORAGE_TYPE`.
-
-### Configuração AWS S3
-
-```env
-STORAGE_TYPE=s3
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=us-east-1
-AWS_S3_BUCKET_NAME=meu-bucket
-AWS_S3_BASE_URL=https://cdn.meudominio.com  # Opcional: CDN/CloudFront
-```
-
-### Configuração GCP
-
-**Opção 1 — Arquivo de credenciais:**
-```env
-STORAGE_TYPE=gcp
-GCP_PROJECT_ID=meu-projeto
-GCP_BUCKET_NAME=meu-bucket
-GCP_KEY_FILENAME=./credentials.json
-```
-
-**Opção 2 — Credenciais inline (útil em containers):**
-```env
-GCP_CREDENTIALS={"type":"service_account","project_id":"..."}
-```
-
-**Opção 3 — Application Default Credentials:**  
-Omita `GCP_KEY_FILENAME` e `GCP_CREDENTIALS`; o SDK usará as credenciais do ambiente GCP automaticamente.
-
-### Estrutura do módulo
-
-```
-src/storage/
-  interfaces/
-    storage.interface.ts        # Contrato IStorageService
-  services/
-    local-storage.service.ts    # Implementação local
-    s3-storage.service.ts       # Implementação AWS S3
-    gcp-storage.service.ts      # Implementação GCP
-  storage.controller.ts
-  storage.module.ts
-```
-
----
-
 ## Gerador de Entidades
 
 O projeto inclui um scaffold que gera todos os arquivos de um módulo de domínio de forma padronizada.
@@ -543,7 +496,7 @@ Após gerar, importe o módulo em `app.module.ts` e adicione a entidade ao `data
 
 ## Testes
 
-Os testes usam **Jest** com **SWC** como transpilador (76 testes, 9 suites).
+Os testes usam **Jest** com **SWC** como transpilador.
 
 ```bash
 # Rodar todos os testes
